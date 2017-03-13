@@ -101,6 +101,31 @@ struct android_poll_source {
 };
 
 /**
+ * A custom native app to replace a native activity as a callback place
+ * this nativeApp interface is called from the main application
+ */
+struct NativeApp
+{
+    void (*onDestroy)(struct NativeApp* app);
+    void (*onStart)(struct NativeApp* app);
+    void (*onResume)(struct NativeApp* app);
+    void*(*onSaveInstanceState)(struct NativeApp* app,size_t* outLen);
+    void (*onStop)(struct NativeApp* app);
+    void (*onPause)(struct NativeApp* app);
+    void (*onConfigurationChanged)(struct NativeApp* app);
+    void (*onLowMemory)(struct NativeApp* app);
+    void (*onWindowFocusChanged)(struct NativeApp* app,int focused);
+    void (*onNativeWindowCreated)(struct NativeApp* app, ANativeWindow* window);
+    void (*onNativeWindowDestroyed)(struct NativeApp* app,ANativeWindow* window);
+    void (*onInputQueueCreated)(struct NativeApp* app, AInputQueue* queue);
+    void (*onInputQueueDestroyed)(struct NativeApp* app, AInputQueue* queue);
+
+    struct android_app* app;
+};
+
+struct NativeApp* NativeApp_onCreate(void* savedState, size_t savedStateSize);
+
+/**
  * This is the interface for the standard glue code of a threaded
  * application.  In this model, the application's code is running
  * in its own thread separate from the main thread of the process.

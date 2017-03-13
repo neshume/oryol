@@ -179,8 +179,14 @@ iosBridge::discard() {
     ORYOL_OBJC_RELEASE(this->mtkView); this->mtkView = nil;
     ORYOL_OBJC_RELEASE(this->mtkViewDelegate); this->mtkViewDelegate = nil;
     #else
-    [this->eaglContext invalidate]; this->eaglContext = nil;
-    [this->glkView invalidate]; this->glkView = nil;
+    // [PAVELY] :   EAGLContext class does not have 'invalidate' method. Application crashes (in runtime) here when discarding iosBridge instance.
+    //              Compiler does not display eror or warning here because of eaglContext member is declared as ORYOL_OBJC_ID type, which
+    //              is actually an alias to objc 'id' type. When declared as 'EAGLContext *eaglContext' there is a compile error which is better.
+    //[this->eaglContext invalidate];
+    this->eaglContext = nil;
+    // [PAVELY] :   The comment above related to the glkView as well. Just assiging 'nil' is quite enough
+    //[this->glkView invalidate];
+    this->glkView = nil;
     #endif
     this->app = nullptr;
 }

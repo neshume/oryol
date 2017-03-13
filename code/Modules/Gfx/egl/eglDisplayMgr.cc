@@ -27,6 +27,7 @@ eglDisplay(nullptr),
 eglConfig(nullptr),
 eglSurface(nullptr),
 eglContext(nullptr) {
+        Log::Info("eglDisplayMgr::eglDisplayMgr!\n");
     // empty
 }
 
@@ -100,6 +101,7 @@ eglDisplayMgr::SetupDisplay(const GfxSetup& gfxSetup, const gfxPointers& ptrs) {
 
     #if ORYOL_ANDROID
         o_assert(OryolAndroidAppState);
+        o_assert(OryolAndroidAppState->window != NULL);
         EGLNativeWindowType window = OryolAndroidAppState->window;
         // from the native_activity NDK sample:
         /* EGL_NATIVE_VISUAL_ID is an attribute of the EGLConfig that is

@@ -1145,6 +1145,13 @@ glRenderer::applyUniformBlock(ShaderStage::Code bindStage, int bindSlot, int64_t
                         ::glUniform1i(glLoc, val);
                     }
                     break;
+                case UniformType::Int:
+                {
+                    // NOTE: bools are actually stored as int32 in the uniform block struct
+                    const int val = *(const int*)valuePtr;
+                    ::glUniform1i(glLoc, val);
+                }
+                    break;
 
                 default:
                     o_error("FIXME: invalid uniform type!\n");

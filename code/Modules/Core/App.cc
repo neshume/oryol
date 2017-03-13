@@ -27,11 +27,12 @@ App* App::self = nullptr;
 
 //------------------------------------------------------------------------------
 App::App() :
-curState(AppState::Init),
-nextState(AppState::InvalidAppState),
+curState(AppState::InvalidAppState),
+nextState(AppState::Init),
 quitRequested(false),
 suspendRequested(false)
 {
+    Log::Info("=> App::App\n");
     self = this;
     #if ORYOL_ANDROID
     this->androidBridge = Memory::New<_priv::androidBridge>();
@@ -110,7 +111,9 @@ App::staticOnFrame() {
 //------------------------------------------------------------------------------
 void
 App::addBlocker(AppState::Code blockedState) {
+    
     if (!this->blockers.Contains(blockedState)) {
+        Oryol::Log::Info("added blocker for state %d\n",blockedState);
         this->blockers.Add(blockedState);
     }
 }
@@ -119,6 +122,7 @@ App::addBlocker(AppState::Code blockedState) {
 void
 App::remBlocker(AppState::Code blockedState) {
     if (this->blockers.Contains(blockedState)) {
+        Oryol::Log::Info("removed blocker for state %d\n",blockedState);
         this->blockers.Erase(blockedState);
     }
 }
@@ -129,11 +133,14 @@ App::onFrame() {
     o_trace_begin_frame();
     o_trace_scoped(App_OnFrame);
     
+    //Log::Info("App::onFrame -> curState : %d\n",this->curState);
+    //Log::Info("App::onFrame -> nextState : %d\n",this->nextState);
     // state transition?
     if ((this->nextState != AppState::InvalidAppState) && (this->nextState != this->curState)) {
         // check if the next state is blocked
         if (this->blockers.Contains(this->nextState)) {
             // yikes, we're blocked
+            
             if (AppState::Blocked != this->curState) {
                 Log::Info("App::onFrame(): state '%s' is blocked, switching to Blocked state!\n", AppState::ToString(this->nextState));
                 this->curState = AppState::Blocked;
