@@ -3,8 +3,8 @@
 //------------------------------------------------------------------------------
 #include "Pre.h"
 #include "UnitTest++/src/UnitTest++.h"
-#include "Gfx/gl/gl_impl.h"
-#include "Gfx/gl/glTypes.h"
+#include "Gfx/private/gl/gl_impl.h"
+#include "Gfx/private/gl/glTypes.h"
 
 using namespace Oryol;
 using namespace _priv;
@@ -22,11 +22,7 @@ TEST(glTypesTest) {
     CHECK(glTypes::asGLTexImageFormat(PixelFormat::RGBA32F) == GL_RGBA);
     CHECK(glTypes::asGLTexImageFormat(PixelFormat::RGBA16F) == GL_RGBA);
     CHECK(glTypes::asGLTexImageFormat(PixelFormat::DEPTH) == GL_DEPTH_COMPONENT);
-    #if ORYOL_OPENGLES2
-    CHECK(glTypes::asGLTexImageFormat(PixelFormat::DEPTHSTENCIL) == GL_DEPTH_STENCIL_OES);
-    #else
     CHECK(glTypes::asGLTexImageFormat(PixelFormat::DEPTHSTENCIL) == GL_DEPTH_STENCIL);
-    #endif
     
     // glTexImage type
     // FIXME: incomplete
@@ -37,11 +33,6 @@ TEST(glTypesTest) {
     CHECK(glTypes::asGLTexImageType(PixelFormat::RGBA4) == GL_UNSIGNED_SHORT_4_4_4_4);
     CHECK(glTypes::asGLTexImageType(PixelFormat::DEPTH) == GL_UNSIGNED_SHORT);
     CHECK(glTypes::asGLTexImageType(PixelFormat::RGBA32F) == GL_FLOAT);
-    #if ORYOL_OPENGLES2
-    CHECK(glTypes::asGLTexImageType(PixelFormat::RGBA16F) == GL_HALF_FLOAT_OES);
-    CHECK(glTypes::asGLTexImageType(PixelFormat::DEPTHSTENCIL) == GL_UNSIGNED_INT_24_8_OES);
-    #else
     CHECK(glTypes::asGLTexImageType(PixelFormat::RGBA16F) == GL_HALF_FLOAT);
     CHECK(glTypes::asGLTexImageType(PixelFormat::DEPTHSTENCIL) == GL_UNSIGNED_INT_24_8);
-    #endif
 }

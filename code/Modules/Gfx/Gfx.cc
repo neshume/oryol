@@ -4,13 +4,28 @@
 #include "Pre.h"
 #include "Gfx.h"
 #include "Core/Core.h"
-#include "Gfx/Core/gfxPointers.h"
+#include "Core/Trace.h"
+#include "Gfx/private/gfxPointers.h"
+#include "Gfx/private/displayMgr.h"
+#include "Gfx/private/gfxResourceContainer.h"
+#include "Gfx/private/renderer.h"
 
 namespace Oryol {
 
 using namespace _priv;
 
-Gfx::_state* Gfx::state = nullptr;
+namespace {
+    struct _state {
+        class GfxSetup gfxSetup;
+        GfxFrameInfo gfxFrameInfo;
+        RunLoop::Id runLoopId = RunLoop::InvalidId;
+        _priv::displayMgr displayManager;
+        class _priv::renderer renderer;
+        _priv::gfxResourceContainer resourceContainer;
+        bool inPass = false;
+    };
+    _state* state = nullptr;
+}
 
 //------------------------------------------------------------------------------
 void
@@ -27,6 +42,7 @@ Gfx::Setup(const class GfxSetup& setup) {
     pointers.shaderPool = &state->resourceContainer.shaderPool;
     pointers.texturePool = &state->resourceContainer.texturePool;
     pointers.pipelinePool = &state->resourceContainer.pipelinePool;
+    pointers.renderPassPool = &state->resourceContainer.renderPassPool;
     
     state->displayManager.SetupDisplay(setup, pointers);
     state->renderer.setup(setup, pointers);
@@ -41,6 +57,8 @@ Gfx::Setup(const class GfxSetup& setup) {
 void
 Gfx::Discard() {
     o_assert_dbg(IsValid());
+    o_assert_dbg(!state->inPass);
+    state->resourceContainer.GarbageCollect();
     state->resourceContainer.Destroy(ResourceLabel::All);
     Core::PreRunLoop()->Remove(state->runLoopId);
     state->renderer.discard();
@@ -93,9 +111,9 @@ Gfx::DisplayAttrs() {
 
 //------------------------------------------------------------------------------
 const DisplayAttrs&
-Gfx::RenderTargetAttrs() {
+Gfx::PassAttrs() {
     o_assert_dbg(IsValid());
-    return state->renderer.renderTargetAttrs();
+    return state->renderer.renderPassAttrs();
 }
 
 //------------------------------------------------------------------------------
@@ -107,23 +125,55 @@ Gfx::FrameInfo() {
 
 //------------------------------------------------------------------------------
 void
-Gfx::ApplyDefaultRenderTarget(const ClearState& clearState) {
+Gfx::BeginPass() {
     o_assert_dbg(IsValid());
-    state->gfxFrameInfo.NumApplyRenderTarget++;
-    state->renderer.applyRenderTarget(nullptr, clearState);
+    o_assert_dbg(!state->inPass);
+    state->inPass = true;
+    state->gfxFrameInfo.NumPasses++;
+    state->renderer.beginPass(nullptr, &state->gfxSetup.DefaultPassAction);
 }
 
 //------------------------------------------------------------------------------
 void
-Gfx::ApplyRenderTarget(const Id& id, const ClearState& clearState) {
+Gfx::BeginPass(const PassAction& action) {
     o_assert_dbg(IsValid());
-    o_assert_dbg(id.IsValid());
-    o_assert_dbg(id.Type == GfxResourceType::Texture);
+    o_assert_dbg(!state->inPass);
+    state->inPass = true;
+    state->gfxFrameInfo.NumPasses++;
+    state->renderer.beginPass(nullptr, &action);
+}
 
-    state->gfxFrameInfo.NumApplyRenderTarget++;
-    texture* renderTarget = state->resourceContainer.lookupTexture(id);
-    o_assert_dbg(nullptr != renderTarget);
-    state->renderer.applyRenderTarget(renderTarget, clearState);
+//------------------------------------------------------------------------------
+void
+Gfx::BeginPass(const Id& id) {
+    o_assert_dbg(IsValid());
+    o_assert_dbg(!state->inPass);
+    state->inPass = true;
+    state->gfxFrameInfo.NumPasses++;
+    renderPass* pass = state->resourceContainer.lookupRenderPass(id);
+    o_assert_dbg(pass);
+    state->renderer.beginPass(pass, &pass->Setup.DefaultAction);
+}
+
+//------------------------------------------------------------------------------
+void
+Gfx::BeginPass(const Id& id, const PassAction& passAction) {
+    o_assert_dbg(IsValid());
+    o_assert_dbg(!state->inPass);
+    state->inPass = true;
+    state->gfxFrameInfo.NumPasses++;
+    renderPass* pass = state->resourceContainer.lookupRenderPass(id);
+    o_assert_dbg(pass);
+    state->renderer.beginPass(pass, &passAction);
+}
+
+//------------------------------------------------------------------------------
+void
+Gfx::EndPass() {
+    o_assert_dbg(IsValid());
+    o_assert_dbg(state->inPass);
+    state->inPass = false;
+    state->renderer.endPass();
 }
 
 //------------------------------------------------------------------------------
@@ -131,6 +181,7 @@ void
 Gfx::ApplyDrawState(const DrawState& drawState) {
     o_trace_scoped(Gfx_ApplyDrawState);
     o_assert_dbg(IsValid());
+    o_assert_dbg(state->inPass);
     o_assert_dbg(drawState.Pipeline.Type == GfxResourceType::Pipeline);
     state->gfxFrameInfo.NumApplyDrawState++;
 
@@ -258,20 +309,21 @@ Gfx::QueryResourcePoolInfo(GfxResourceType::Code resType) {
 void
 Gfx::DestroyResources(ResourceLabel label) {
     o_assert_dbg(IsValid());
-    return state->resourceContainer.Destroy(label);
+    return state->resourceContainer.DestroyDeferred(label);
 }
 
 //------------------------------------------------------------------------------
-_priv::gfxResourceContainer&
+_priv::gfxResourceContainer*
 Gfx::resource() {
     o_assert_dbg(IsValid());
-    return state->resourceContainer;
+    return &(state->resourceContainer);
 }
 
 //------------------------------------------------------------------------------
 void
 Gfx::ApplyViewPort(int x, int y, int width, int height, bool originTopLeft) {
     o_assert_dbg(IsValid());
+    o_assert_dbg(state->inPass);
     state->gfxFrameInfo.NumApplyViewPort++;
     state->renderer.applyViewPort(x, y, width, height, originTopLeft);
 }
@@ -280,6 +332,7 @@ Gfx::ApplyViewPort(int x, int y, int width, int height, bool originTopLeft) {
 void
 Gfx::ApplyScissorRect(int x, int y, int width, int height, bool originTopLeft) {
     o_assert_dbg(IsValid());
+    o_assert_dbg(state->inPass);
     state->gfxFrameInfo.NumApplyScissorRect++;
     state->renderer.applyScissorRect(x, y, width, height, originTopLeft);
 }
@@ -289,8 +342,10 @@ void
 Gfx::CommitFrame() {
     o_trace_scoped(Gfx_CommitFrame);
     o_assert_dbg(IsValid());
+    o_assert_dbg(!state->inPass);
     state->renderer.commitFrame();
     state->displayManager.Present();
+    state->resourceContainer.GarbageCollect();
     state->gfxFrameInfo = GfxFrameInfo();
 }
 
@@ -334,24 +389,12 @@ Gfx::UpdateTexture(const Id& id, const void* data, const ImageDataAttrs& offsets
 
 //------------------------------------------------------------------------------
 void
-Gfx::ReadPixels(void* buf, int bufNumBytes) {
-    o_trace_scoped(Gfx_ReadPixels);
-    o_assert_dbg(IsValid());
-    state->renderer.readPixels(buf, bufNumBytes);
-}
-
-//------------------------------------------------------------------------------
-void
 Gfx::Draw(int primGroupIndex, int numInstances) {
     o_trace_scoped(Gfx_Draw);
     o_assert_dbg(IsValid());
+    o_assert_dbg(state->inPass);
     state->gfxFrameInfo.NumDraw++;
-    if (1 == numInstances) {
-        state->renderer.draw(primGroupIndex);
-    }
-    else {
-        state->renderer.drawInstanced(primGroupIndex, numInstances);
-    }
+    state->renderer.draw(primGroupIndex, numInstances);
 }
 
 //------------------------------------------------------------------------------
@@ -359,13 +402,9 @@ void
 Gfx::Draw(const PrimitiveGroup& primGroup, int numInstances) {
     o_trace_scoped(Gfx_Draw);
     o_assert_dbg(IsValid());
+    o_assert_dbg(state->inPass);
     state->gfxFrameInfo.NumDraw++;
-    if (1 == numInstances) {
-        state->renderer.draw(primGroup);
-    }
-    else {
-        state->renderer.drawInstanced(primGroup, numInstances);
-    }
+    state->renderer.draw(primGroup.BaseElement, primGroup.NumElements, numInstances);
 }
 
 //------------------------------------------------------------------------------
@@ -403,17 +442,17 @@ Gfx::validateMeshes(pipeline* pip, mesh** meshes, int num) {
                 o_error("invalid mesh block: input mesh at slot '%d' not valid!\n", mshIndex);
             }
             if ((mshIndex > 0) && (msh->indexBufferAttrs.Type != IndexType::None)) {
-                o_error("invalid drawState: input mesh at slot '%d' has indices, only allowed for slot 0!", mshIndex);
+                o_error("invalid drawState: input mesh at slot '%d' has indices, only allowed for slot 0!\n", mshIndex);
             }
             if ((mshIndex > 0) && (msh->numPrimGroups > 0)) {
-                o_error("invalid mesh block: input mesh at slot '%d' has primitive groups, only allowed for slot 0!", mshIndex);
+                o_error("invalid mesh block: input mesh at slot '%d' has primitive groups, only allowed for slot 0!\n", mshIndex);
             }
             const int numComps = msh->vertexBufferAttrs.Layout.NumComponents();
             for (int compIndex = 0; compIndex < numComps; compIndex++) {
                 const auto& comp = msh->vertexBufferAttrs.Layout.ComponentAt(compIndex);
                 vertexAttrCounts[comp.Attr]++;
                 if (vertexAttrCounts[comp.Attr] > 1) {
-                    o_error("invalid mesh block: same vertex attribute declared in multiple input meshes!");
+                    o_error("invalid mesh block: same vertex attribute declared in multiple input meshes!\n");
                 }
             }
         }
@@ -430,18 +469,230 @@ Gfx::validateTextures(ShaderStage::Code stage, pipeline* pip, texture** textures
     // check if provided texture types are compatible with the expections shader
     const shader* shd = pip->shd;
     o_assert_dbg(shd);
-    int texBlockIndex = shd->Setup.TextureBlockIndexByStage(stage);
-    o_assert_dbg(InvalidIndex != texBlockIndex);
-    const TextureBlockLayout& layout = shd->Setup.TextureBlockLayout(texBlockIndex);
-    for (int i = 0; i < numTextures; i++) {
-        if (textures[i]) {
-            const auto& texBlockComp = layout.ComponentAt(layout.ComponentIndexForBindSlot(i));
-            if (texBlockComp.Type != textures[i]->textureAttrs.Type) {
-                o_error("Texture type mismatch at slot '%s'\n", texBlockComp.Name.AsCStr());
+    for (int slot = 0; slot < numTextures; slot++) {
+        int index = shd->Setup.TextureIndexByStageAndSlot(stage, slot);
+        if ((InvalidIndex != index) && textures[slot]) {
+            if (textures[slot]->textureAttrs.Type != shd->Setup.TexType(index)) {
+                o_error("Texture type mismatch at slot '%d'!\n", slot);
             }
+        }
+        else if ((InvalidIndex == index) && textures[slot]) {
+            o_warn("Texture applied at slot '%d' which isn't expected by shader.\n", slot);
+        }
+        else if ((InvalidIndex != index) && !textures[slot]) {
+            o_error("No texture applied at slot '%d', but shader expects one!\n", slot);
         }
     }
 }
 #endif
+
+//------------------------------------------------------------------------------
+#if ORYOL_DEBUG
+void
+Gfx::validateTextureSetup(const TextureSetup& setup, const void* data, int size) {
+    o_assert((setup.NumMipMaps > 0) && (setup.NumMipMaps <= GfxConfig::MaxNumTextureMipMaps));
+    o_assert((setup.Width >= 1) && (setup.Height >= 1) && (setup.Depth >= 1));
+    if (data) {
+        o_assert(size > 0);
+        o_assert(setup.TextureUsage == Usage::Immutable);
+        o_assert(setup.ImageData.NumMipMaps == setup.NumMipMaps);
+        if (setup.Type == TextureType::TextureCube) {
+            o_assert(setup.ImageData.NumFaces == 6);
+        }
+        else {
+            o_assert(setup.ImageData.NumFaces == 1);
+        }
+    }
+    if (setup.Type == TextureType::Texture2D) {
+        o_assert(setup.Depth == 1);
+    }
+    if (setup.Type == TextureType::TextureArray) {
+        o_assert(setup.Depth <= GfxConfig::MaxNumTextureArraySlices);
+    }
+    if (setup.Type == TextureType::Texture3D) {
+        o_assert(!setup.IsRenderTarget);
+    }
+    if (setup.IsRenderTarget) {
+        o_assert(setup.TextureUsage == Usage::Immutable);
+        o_assert(PixelFormat::IsValidRenderTargetColorFormat(setup.ColorFormat));
+        if (setup.DepthFormat != PixelFormat::InvalidPixelFormat) {
+            o_assert(PixelFormat::IsValidRenderTargetDepthFormat(setup.DepthFormat));
+        }
+    }
+    else {
+        o_assert(setup.SampleCount == 1);
+        o_assert(setup.DepthFormat == PixelFormat::InvalidPixelFormat);
+    }
+}
+#endif
+
+//------------------------------------------------------------------------------
+#if ORYOL_DEBUG
+void
+Gfx::validateMeshSetup(const MeshSetup& setup, const void* data, int size) {
+    o_assert(setup.ShouldSetupFullScreenQuad() || (setup.VertexUsage != Usage::InvalidUsage) || (setup.IndexUsage != Usage::InvalidUsage));
+    if (setup.NumVertices > 0) {
+        o_assert(!setup.Layout.Empty());
+        if (setup.VertexUsage == Usage::Immutable) {
+            o_assert(data && (size > 0));
+            o_assert((setup.VertexDataOffset >= 0) && (setup.VertexDataOffset < size));
+        }
+    }
+    if (setup.NumIndices > 0) {
+        o_assert((setup.IndicesType == IndexType::Index16) || (setup.IndicesType == IndexType::Index32));
+        if (setup.IndexUsage == Usage::Immutable) {
+            o_assert(data && (size > 0));
+            o_assert((setup.IndexDataOffset >= 0) && (setup.IndexDataOffset < size));
+        }
+    }
+}
+#endif
+
+//------------------------------------------------------------------------------
+#if ORYOL_DEBUG
+void
+Gfx::validatePipelineSetup(const PipelineSetup& setup) {
+    o_assert(setup.PrimType != PrimitiveType::InvalidPrimitiveType);
+    o_assert(setup.Shader.IsValid());
+    bool anyLayoutValid = false;
+    for (const auto& layout : setup.Layouts) {
+        if (!layout.Empty()) {
+            anyLayoutValid = true;
+            break;
+        }
+    }
+    o_assert(anyLayoutValid);
+}
+#endif
+
+//------------------------------------------------------------------------------
+#if ORYOL_DEBUG
+void
+Gfx::validatePassSetup(const PassSetup& setup) {
+    // check that at least one color attachment texture is defined
+    // and that there are no 'holes' if there are multiple attachments
+    bool continuous = true;
+    for (int i = 0; i < GfxConfig::MaxNumColorAttachments; i++) {
+        if (setup.ColorAttachments[i].Texture.IsValid()) {
+            if (!continuous) {
+                o_error("invalid render pass: must have continuous color attachments!\n");
+            }
+        }
+        else {
+            if (0 == i) {
+                o_error("invalid render pass: must have color attachment at slot 0!\n");
+            }
+            continuous = false;
+        }
+    }
+
+    // check that all render targets have the required params
+    const texture* t0 = state->resourceContainer.lookupTexture(setup.ColorAttachments[0].Texture);
+    o_assert(t0);
+    const int w = t0->textureAttrs.Width;
+    const int h = t0->textureAttrs.Height;
+    const int sampleCount = t0->textureAttrs.SampleCount;
+    for (int i = 0; i < GfxConfig::MaxNumColorAttachments; i++) {
+        const texture* tex = state->resourceContainer.lookupTexture(setup.ColorAttachments[i].Texture);
+        if (tex) {
+            const auto& attrs = tex->textureAttrs;
+            if ((attrs.Width != w) || (attrs.Height != h)) {
+                o_error("invalid render pass: all color attachments must have the same size!\n");
+            }
+            if (attrs.SampleCount != sampleCount) {
+                o_error("invalid render pass: all color attachments must have same sample-count!\n");
+            }
+            if (attrs.TextureUsage != Usage::Immutable) {
+                o_error("invalid render pass: color attachments must have immutable usage!\n");
+            }
+            if (!tex->Setup.IsRenderTarget) {
+                o_error("invalid render pass: color attachment must have been setup as render target!\n");
+            }
+        }
+    }
+    const texture* dsTex = state->resourceContainer.lookupTexture(setup.DepthStencilTexture);
+    if (dsTex) {
+        const auto& attrs = dsTex->textureAttrs;
+        if ((attrs.Width != w) || (attrs.Height != h)) {
+            o_error("invalid render pass: depth-stencil attachment must have same size as color attachments!\n");
+        }
+        if (attrs.SampleCount != sampleCount) {
+            o_error("invalid render pass: depth-stencil attachment must have sample sample-count as color attachments!\n");
+        }
+        if (attrs.TextureUsage != Usage::Immutable) {
+            o_error("invalid render pass: depth attachment must have immutable usage!\n");
+        }
+        if (!dsTex->Setup.IsRenderTarget) {
+            o_error("invalid render pass: depth attachment must have been setup as render target!\n");
+        }
+    }
+}
+#endif
+
+//------------------------------------------------------------------------------
+#if ORYOL_DEBUG
+void
+Gfx::validateShaderSetup(const ShaderSetup& setup) {
+    // hmm, FIXME
+}
+#endif
+
+//------------------------------------------------------------------------------
+template<> Id
+Gfx::CreateResource(const TextureSetup& setup, const void* data, int size) {
+    o_assert_dbg(IsValid());
+    #if ORYOL_DEBUG
+    validateTextureSetup(setup, data, size);
+    #endif
+    return state->resourceContainer.Create(setup, data, size);
+}
+
+//------------------------------------------------------------------------------
+template<> Id
+Gfx::CreateResource(const MeshSetup& setup, const void* data, int size) {
+    o_assert_dbg(IsValid());
+    #if ORYOL_DEBUG
+    validateMeshSetup(setup, data, size);
+    #endif
+    return state->resourceContainer.Create(setup, data, size);
+}
+
+//------------------------------------------------------------------------------
+template<> Id
+Gfx::CreateResource(const ShaderSetup& setup, const void* data, int size) {
+    o_assert_dbg(IsValid());
+    #if ORYOL_DEBUG
+    validateShaderSetup(setup);
+    #endif
+    return state->resourceContainer.Create(setup, nullptr, 0);
+}
+
+//------------------------------------------------------------------------------
+template<> Id
+Gfx::CreateResource(const PipelineSetup& setup, const void* data, int size) {
+    o_assert_dbg(IsValid());
+    #if ORYOL_DEBUG
+    validatePipelineSetup(setup);
+    #endif
+    return state->resourceContainer.Create(setup, nullptr, 0);
+}
+
+//------------------------------------------------------------------------------
+template<> Id
+Gfx::CreateResource(const PassSetup& setup, const void* data, int size) {
+    o_assert_dbg(IsValid());
+    #if ORYOL_DEBUG
+    validatePassSetup(setup);
+    #endif
+    return state->resourceContainer.Create(setup, nullptr, 0);
+}
+
+//------------------------------------------------------------------------------
+void
+Gfx::applyUniformBlock(ShaderStage::Code bindStage, int bindSlot, uint32_t layoutHash, const uint8_t* ptr, int byteSize) {
+    o_assert_dbg(IsValid());
+    state->gfxFrameInfo.NumApplyUniformBlock++;
+    state->renderer.applyUniformBlock(bindStage, bindSlot, layoutHash, ptr, byteSize);
+}
 
 } // namespace Oryol

@@ -14,7 +14,10 @@
 #include "Core/Types.h"
 #include "Core/Ptr.h"
 #include "Core/Class.h"
-#include "Core/Memory/poolAllocator.h"
+#include "Core/Config.h"
+#if ORYOL_HAS_ATOMIC
+#include <atomic>
+#endif
 
 namespace Oryol {
     

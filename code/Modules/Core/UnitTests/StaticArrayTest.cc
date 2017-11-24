@@ -46,4 +46,19 @@ TEST(StaticArrayTest) {
         CHECK(array2[i] == i);
         CHECK(array3[i] == i);
     }
+
+    Slice<int> slice = array2.MakeSlice(2, 5);
+    CHECK(slice.Size() == 5);
+    CHECK(slice.Offset() == 2);
+    CHECK(slice[0] == 2);
+    CHECK(slice[1] == 3);
+    CHECK(slice[2] == 4);
+    CHECK(slice[3] == 5);
+    CHECK(slice[4] == 6);
+
+    slice = array2.MakeSlice();
+    CHECK(slice.Size() == 16);
+    CHECK(slice.Offset() == 0);
+    CHECK(slice[0] == 0);
+    CHECK(slice[15] == 15);
 }

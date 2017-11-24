@@ -3,10 +3,8 @@
 //------------------------------------------------------------------------------
 #if ORYOL_WINDOWS
 #define HAVE_BACKTRACE (0)
-#if !ORYOL_UWP
 #define HAVE_STACKWALKER (1)
-#endif
-#elif ORYOL_EMSCRIPTEN||ORYOL_ANDROID||ORYOL_PNACL
+#elif ORYOL_EMSCRIPTEN||ORYOL_ANDROID
 #define HAVE_BACKTRACE (0)
 #define HAVE_STACKWALKER (0)
 #else
@@ -19,7 +17,7 @@
 #include <execinfo.h>
 #endif
 #if HAVE_STACKWALKER
-#include "Core/windows/StackWalker.h"
+#include "Core/private/windows/StackWalker.h"
 #endif
 #include <cstdlib>
 #include <cstring>

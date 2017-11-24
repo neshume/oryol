@@ -29,6 +29,7 @@ fips_begin_module(Core)
     fips_files(
         Array.h
         ArrayMap.h
+        Slice.h
         Buffer.h
         HashSet.h
         KeyValuePair.h
@@ -37,9 +38,10 @@ fips_begin_module(Core)
         Set.h
         StaticArray.h
         elementBuffer.h
+        InlineArray.h
     )
     fips_dir(Memory)
-    fips_files(Memory.cc Memory.h poolAllocator.h)
+    fips_files(Memory.cc Memory.h)
     fips_dir(String)
     fips_files(
         String.cc String.h
@@ -53,7 +55,6 @@ fips_begin_module(Core)
     )
     fips_dir(Threading)
     fips_files(
-        RWLock.h
         ThreadLocalData.cc ThreadLocalData.h
         ThreadLocalPtr.h
     )
@@ -62,30 +63,24 @@ fips_begin_module(Core)
         Clock.cc Clock.h Duration.h TimePoint.h
     )
     if (FIPS_POSIX)
-        fips_dir(posix)
+        fips_dir(private/posix)
         fips_files(precompiled.h)
     endif()
     if (FIPS_LINUX)
         fips_libs(dl)
     endif()
     if (FIPS_WINDOWS)
-        fips_dir(windows)
-        if (NOT FIPS_UWP)
-            fips_files(StackWalker.cc StackWalker.h)
-        endif()
+        fips_dir(private/windows)
+        fips_files(StackWalker.cc StackWalker.h)
         fips_files(precompiled.h)
-        if (FIPS_UWP)
-            fips_dir(uwp)
-            fips_files(uwpBridge.h uwpBridge.cc)
-        endif()
     endif()
     if (FIPS_ANDROID)
-        fips_dir(android)
+        fips_dir(private/android)
         fips_files(android_native_app_glue.c android_native_app_glue.h)
         fips_files(androidBridge.cc androidBridge.h)
     endif()
     if (FIPS_IOS)
-        fips_dir(ios)
+        fips_dir(private/ios)
         fips_files(
             iosBridge.mm iosBridge.h
         )
@@ -97,16 +92,9 @@ fips_begin_module(Core)
         endif()
     endif()
     if (FIPS_MACOS AND ORYOL_METAL)
-        fips_dir(osx)
+        fips_dir(private/osx)
         fips_files(osxBridge.h osxBridge.mm osxInputDefs.h)
         fips_frameworks_osx(Cocoa Metal MetalKit QuartzCore)
-    endif()
-    if (FIPS_PNACL)
-        fips_dir(pnacl)
-        fips_files(
-            pnaclInstance.cc pnaclInstance.h
-            pnaclModule.cc pnaclModule.h
-        )
     endif()
     fips_dir(.)
     fips_files(Trace.h Trace.cc)
@@ -125,6 +113,9 @@ fips_begin_unittest(Core)
     fips_vs_warning_level(3)
     fips_dir(UnitTests)
     fips_files(
+        PtrTest.cc
+        SliceTest.cc
+        InlineArrayTest.cc
         StackTraceTest.cc
         BufferTest.cc
         ArgsTest.cc
@@ -136,7 +127,6 @@ fips_begin_unittest(Core)
         HashSetTest.cc
         MapTest.cc
         MemoryTest.cc
-        PoolAllocatorTest.cc
         QueueTest.cc
         RttiTest.cc
         RunLoopTest.cc

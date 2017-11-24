@@ -16,11 +16,11 @@ public:
     AppState::Code OnRunning();
     AppState::Code OnInit();
     AppState::Code OnCleanup();
-private:
+
     glm::mat4 computeMVP(const glm::vec3& pos);
 
     DrawState drawState;
-    Shader::Params params;
+    Shader::params params;
     glm::mat4 view;
     glm::mat4 proj;
     float angleX = 0.0f;
@@ -30,41 +30,14 @@ OryolMain(PackedNormalsApp);
 
 //------------------------------------------------------------------------------
 AppState::Code
-PackedNormalsApp::OnRunning() {
-    
-    this->angleY += 0.01f;
-    this->angleX += 0.02f;
-    
-    Gfx::ApplyDefaultRenderTarget();
-    Gfx::ApplyDrawState(this->drawState);
-
-    static const glm::vec3 positions[] = {
-        glm::vec3(-1.0, 1.0f, -6.0f),
-        glm::vec3(1.0f, 1.0f, -6.0f),
-        glm::vec3(-2.0f, -1.0f, -6.0f),
-        glm::vec3(+2.0f, -1.0f, -6.0f),
-        glm::vec3(0.0f, -1.0f, -6.0f)
-    };
-    int primGroupIndex = 0;
-    for (const auto& pos : positions) {
-        this->params.ModelViewProjection = this->computeMVP(pos);
-        Gfx::ApplyUniformBlock(this->params);
-        Gfx::Draw(primGroupIndex++);
-    }
-    Gfx::CommitFrame();
-    
-    return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
-}
-
-//------------------------------------------------------------------------------
-AppState::Code
 PackedNormalsApp::OnInit() {
     Gfx::Setup(GfxSetup::WindowMSAA4(600, 400, "Oryol Packed Normals Sample"));
 
     ShapeBuilder shapeBuilder;
-    shapeBuilder.Layout
-        .Add(VertexAttr::Position, VertexFormat::Float3)
-        .Add(VertexAttr::Normal, VertexFormat::Byte4N);
+    shapeBuilder.Layout = {
+        { VertexAttr::Position, VertexFormat::Float3 },
+        { VertexAttr::Normal, VertexFormat::Byte4N }
+    };
     shapeBuilder.Box(1.0f, 1.0f, 1.0f, 4)
         .Sphere(0.75f, 36, 20)
         .Cylinder(0.5f, 1.5f, 36, 10)
@@ -85,6 +58,34 @@ PackedNormalsApp::OnInit() {
     this->view = glm::mat4();
     
     return App::OnInit();
+}
+
+//------------------------------------------------------------------------------
+AppState::Code
+PackedNormalsApp::OnRunning() {
+    
+    this->angleY += 0.01f;
+    this->angleX += 0.02f;
+    
+    Gfx::BeginPass();
+    Gfx::ApplyDrawState(this->drawState);
+    static const glm::vec3 positions[] = {
+        glm::vec3(-1.0, 1.0f, -6.0f),
+        glm::vec3(1.0f, 1.0f, -6.0f),
+        glm::vec3(-2.0f, -1.0f, -6.0f),
+        glm::vec3(+2.0f, -1.0f, -6.0f),
+        glm::vec3(0.0f, -1.0f, -6.0f)
+    };
+    int primGroupIndex = 0;
+    for (const auto& pos : positions) {
+        this->params.mvp = this->computeMVP(pos);
+        Gfx::ApplyUniformBlock(this->params);
+        Gfx::Draw(primGroupIndex++);
+    }
+    Gfx::EndPass();
+    Gfx::CommitFrame();
+    
+    return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
 }
 
 //------------------------------------------------------------------------------

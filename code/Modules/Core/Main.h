@@ -10,46 +10,41 @@
     (like Windows.h), so it is not recommended to include the header anywhere 
     else to not pollute the whole code base with platform-specific headers.
 */
-#if ORYOL_WINDOWS && !ORYOL_UWP
+#if ORYOL_WINDOWS
 #define VC_EXTRALEAN (1)
 #define WIN32_LEAN_AND_MEAN (1)
 #define NOUSER (1)
+#define NOMINMAX
 #include <Windows.h>
-#elif ORYOL_UWP
-#include "Core/uwp/uwpBridge.h"
 #elif ORYOL_ANDROID
-#include "Core/android/android_native_app_glue.h"
-#elif ORYOL_PNACL
-#include "Core/pnacl/pnaclModule.h"
+#include "Core/private/android/android_native_app_glue.h"
 #endif
 #include "Core/App.h"
 #include "Core/String/WideString.h"
 
-#if ORYOL_UWP
-// on UWP, the UI event loop is running in it's own thread,
-// need to move creation of the Oryol app object to the
-// UI thread, thus the lambda
+#if ORYOL_WINDOWS
+#if FIPS_APP_CMDLINE
 #define OryolMain(clazz) \
 Oryol::Args OryolArgs; \
-[Platform::MTAThread] \
-int main(Platform::Array<Platform::String^>^) { \
-    Oryol::_priv::uwpBridge app; \
-    app.start([]() -> App* { \
-        return Memory::New<clazz>(); \
-    }); \
+int main(int argc, const char** argv) { \
+    OryolArgs = Oryol::Args(argc, argv); \
+    clazz* app = Oryol::Memory::New<clazz>(); \
+    app->StartMainLoop(); \
+    Oryol::Memory::Delete(app); \
     return 0; \
 }
-#elif ORYOL_WINDOWS
+#else // FIPS_APP_WINDOWED
 #define OryolMain(clazz) \
 Oryol::Args OryolArgs; \
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR lpCmdLine, int nShowCmd) {\
     Oryol::WideString cmdLine = ::GetCommandLineW(); \
     OryolArgs = Oryol::Args(cmdLine); \
-    clazz* app = Memory::New<clazz>(); \
+    clazz* app = Oryol::Memory::New<clazz>(); \
     app->StartMainLoop(); \
-    Memory::Delete<clazz>(app); \
+    Oryol::Memory::Delete<clazz>(app); \
     return 0; \
 }
+#endif // ORYOL_WINDOWS
 #elif ORYOL_ANDROID
 #define OryolMain(clazz) \
 android_app* OryolAndroidAppState = nullptr; \
@@ -57,31 +52,18 @@ Oryol::Args OryolArgs; \
 void android_main(struct android_app* app_) { \
     app_dummy(); \
     OryolAndroidAppState = app_; \
-    clazz* app = Memory::New<clazz>(); \
+    clazz* app = Oryol::Memory::New<clazz>(); \
     app->StartMainLoop(); \
-    Memory::Delete<clazz>(app); \
-}
-#elif ORYOL_PNACL
-#define OryolMain(clazz) \
-namespace pp \
-{ \
-    Module* CreateModule() \
-    { \
-        return Memory::New<Oryol::_priv::pnaclModule>(); \
-    }; \
-} \
-void PNaclAppCreator() {\
-    static clazz* app = Memory::New<clazz>(); \
-    app->StartMainLoop(); \
+    Oryol::Memory::Delete<clazz>(app); \
 }
 #else
 #define OryolMain(clazz) \
 Oryol::Args OryolArgs; \
 int main(int argc, const char** argv) { \
     OryolArgs = Oryol::Args(argc, argv); \
-    clazz* app = Memory::New<clazz>(); \
+    clazz* app = Oryol::Memory::New<clazz>(); \
     app->StartMainLoop(); \
-    Memory::Delete(app); \
+    Oryol::Memory::Delete(app); \
     return 0; \
 }
 #endif

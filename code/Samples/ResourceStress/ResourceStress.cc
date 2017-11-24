@@ -6,7 +6,7 @@
 #include "IO/IO.h"
 #include "Gfx/Gfx.h"
 #include "Dbg/Dbg.h"
-#include "HTTP/HTTPFileSystem.h"
+#include "HttpFS/HTTPFileSystem.h"
 #include "Assets/Gfx/ShapeBuilder.h"
 #include "Assets/Gfx/TextureLoader.h"
 #include "glm/mat4x4.hpp"
@@ -18,10 +18,10 @@ using namespace Oryol;
 
 class ResourceStressApp : public App {
 public:
-    AppState::Code OnRunning();
     AppState::Code OnInit();
+    AppState::Code OnRunning();
     AppState::Code OnCleanup();
-private:
+
     void createObjects();
     void updateObjects();
     void showInfo();
@@ -40,38 +40,8 @@ private:
     glm::mat4 view;
     glm::mat4 proj;
     TextureSetup texBlueprint;
-    ClearState clearState;
 };
 OryolMain(ResourceStressApp);
-
-//------------------------------------------------------------------------------
-AppState::Code
-ResourceStressApp::OnRunning() {
-
-    // delete and create objects
-    this->frameCount++;
-    this->updateObjects();
-    this->createObjects();
-    this->showInfo();
-
-    Shader::VSParams vsParams;
-    Gfx::ApplyDefaultRenderTarget(this->clearState);
-    for (const auto& obj : this->objects) {
-        // only render objects that have successfully loaded
-        const Id& tex = obj.drawState.FSTexture[Textures::Texture];
-        if (Gfx::QueryResourceInfo(tex).State == ResourceState::Valid) {
-            vsParams.ModelViewProjection = this->proj * this->view * obj.modelTransform;
-            Gfx::ApplyDrawState(obj.drawState);
-            Gfx::ApplyUniformBlock(vsParams);
-            Gfx::Draw();
-        }
-    }
-    Dbg::DrawTextBuffer();
-    Gfx::CommitFrame();
-    
-    // quit or keep running?
-    return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
-}
 
 //------------------------------------------------------------------------------
 AppState::Code
@@ -84,10 +54,11 @@ ResourceStressApp::OnInit() {
 
     // setup Gfx system
     auto gfxSetup = GfxSetup::Window(600, 400, "Oryol Resource Stress Test");
-    gfxSetup.SetPoolSize(GfxResourceType::Mesh, MaxNumObjects + 32);
-    gfxSetup.SetPoolSize(GfxResourceType::Texture, MaxNumObjects + 32);
-    gfxSetup.SetPoolSize(GfxResourceType::Pipeline, MaxNumObjects + 32);
-    gfxSetup.SetPoolSize(GfxResourceType::Shader, 4);
+    gfxSetup.DefaultPassAction = PassAction::Clear(glm::vec4(0.5f, 0.5f, 0.5f, 1.0f));
+    gfxSetup.ResourcePoolSize[GfxResourceType::Mesh] = MaxNumObjects + 32;
+    gfxSetup.ResourcePoolSize[GfxResourceType::Texture] = MaxNumObjects + 32;
+    gfxSetup.ResourcePoolSize[GfxResourceType::Pipeline] = MaxNumObjects + 32;
+    gfxSetup.ResourcePoolSize[GfxResourceType::Shader] = 4;
     Gfx::Setup(gfxSetup);
     
     // setup debug text rendering
@@ -107,9 +78,37 @@ ResourceStressApp::OnInit() {
     this->texBlueprint.Sampler.WrapU = TextureWrapMode::ClampToEdge;
     this->texBlueprint.Sampler.WrapV = TextureWrapMode::ClampToEdge;
 
-    this->clearState.Color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-    
     return App::OnInit();
+}
+
+//------------------------------------------------------------------------------
+AppState::Code
+ResourceStressApp::OnRunning() {
+
+    // delete and create objects
+    this->frameCount++;
+    this->updateObjects();
+    this->createObjects();
+    this->showInfo();
+
+    Gfx::BeginPass();
+    for (const auto& obj : this->objects) {
+        // only render objects that have successfully loaded
+        const Id& tex = obj.drawState.FSTexture[Shader::tex];
+        if (Gfx::QueryResourceInfo(tex).State == ResourceState::Valid) {
+            Gfx::ApplyDrawState(obj.drawState);
+            Shader::vsParams vsParams;
+            vsParams.mvp = this->proj * this->view * obj.modelTransform;
+            Gfx::ApplyUniformBlock(vsParams);
+            Gfx::Draw();
+        }
+    }
+    Dbg::DrawTextBuffer();
+    Gfx::EndPass();
+    Gfx::CommitFrame();
+    
+    // quit or keep running?
+    return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
 }
 
 //------------------------------------------------------------------------------
@@ -141,14 +140,15 @@ ResourceStressApp::createObjects() {
     Object obj;
     obj.label = Gfx::PushResourceLabel();
     ShapeBuilder shapeBuilder;
-    shapeBuilder.Layout
-        .Add(VertexAttr::Position, VertexFormat::Float3)
-        .Add(VertexAttr::TexCoord0, VertexFormat::Float2);
+    shapeBuilder.Layout = {
+        { VertexAttr::Position, VertexFormat::Float3 },
+        { VertexAttr::TexCoord0, VertexFormat::Float2 }
+    };
     shapeBuilder.Box(0.1f, 0.1f, 0.1f, 1);
     obj.drawState.Mesh[0] = Gfx::CreateResource(shapeBuilder.Build());
     auto ps = PipelineSetup::FromLayoutAndShader(shapeBuilder.Layout, this->shader);
     obj.drawState.Pipeline = Gfx::CreateResource(ps);
-    obj.drawState.FSTexture[Textures::Texture] = Gfx::LoadResource(TextureLoader::Create(
+    obj.drawState.FSTexture[Shader::tex] = Gfx::LoadResource(TextureLoader::Create(
         TextureSetup::FromFile(Locator::NonShared("tex:lok_dxt1.dds"), this->texBlueprint)));
     glm::vec3 pos = glm::ballRand(2.0f) + glm::vec3(0.0f, 0.0f, -6.0f);
     obj.modelTransform = glm::translate(glm::mat4(), pos);
@@ -165,7 +165,7 @@ ResourceStressApp::updateObjects() {
         // check if object should be destroyed (it will be
         // destroyed after the texture object had been valid for
         // at least 3 seconds, or if it failed to load)
-        const Id& tex = obj.drawState.FSTexture[Textures::Texture];
+        const Id& tex = obj.drawState.FSTexture[Shader::tex];
         const auto info = Gfx::QueryResourceInfo(tex);
         if ((info.State == ResourceState::Failed) ||
             ((info.State == ResourceState::Valid) && (info.StateAge > (20 * 60)))) {

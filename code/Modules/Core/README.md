@@ -24,7 +24,7 @@ is only available from the main (or UI-) thread, don't have shared-memory-thread
 even have a main() function or where an app can be suspended and restored at will by 
 the operating system.
 
-To hide all these dirty platform-specific details, Oryol offers a convenient application
+To hide all these platform-specific details, Oryol offers a convenient application
 class *Oryol::App* which implements a simple *application-state-model*. During the lifetime
 of an Oryol application, the app goes through different states, controlled by a derived 
 application subclass. While a state is active, an associated per-frame method is called
@@ -80,217 +80,6 @@ AppState::Code MyApp::OnCleanup() {
 
 > NOTE: the current model of implementing per-frame callbacks through virtual
 > methods may change in the future
-
-
-### Class Annotation Macros
-
-When looking through Oryol header files you may wonder about macros inside
-class declarations like this:
-
-```cpp
-class MyClass : public BaseClass {
-    OryolClassDecl(MyClass);
-    OryolClassCreator(MyClass);
-public:
-    /// default constructor
-    MyClass();
-    ...
-};
-```
-
-*OryolClassDecl* and *OryolClassCreator*  are 'class annotation macros' which add some 
-Oryol-specific standard functionality to a class. 
-
-
-### Object Lifetime Management
-
-> NOTE: in general, allocating objects on the heap should be avoided if possible,
-> instead Oryol's philosophy is to pre-allocate fixed sized memory blocks and
-> object pools and keep dynamic allocations to a minimum
-
-Oryol applications should try to keep heap-allocated objects to a minimum, but if
-needed, Oryol's lifetime-managed heap objects using ref-counting and smart pointers
-should be used instead of raw new and delete calls.
-
-There's a few things to keep in mind when using ref-counted objects in Oryol:
-
-1. classes which use ref-counting should be subclasses of RefCounted (or provide a specific set of methods to manage the refcount, but that's an advanced topic)
-2. a class annotation macro must be used to add creation methods to refcounted class
-3. the Ptr<> class must be used as smart-pointer class
-
-With this in place, creating an object then looks like this:
-
-```cpp
-Ptr<MyClass> myObj = MyClass::Create();
-```
-
-The *Create()* method is added by the OryolClassDecl() macro in the class declaration:
-
-```cpp
-class MyClass : public RefCounted {
-    OryolClassDecl(MyClass);
-public:
-    ...
-};
-```
-
-Non-default constructors can be invoked through the Create method as well, and
-of course you can also use the new C++11 auto keyword:
-
-```cpp
-auto myObj = MyClass::Create(arg1, arg2, arg3);
-```
-
-> NOTE: Always keep in mind that there should be a good reason to use heap-allocated, 
-> ref-counted objects instead of stack-allocated or class-embedded objects. Always consider
-> stack-allocated objects and class-embedded objects first!
-
-
-### Object Pools
-
-Object creation can be optimized with object pools which prevents dynamic memory
-allocation per object and reduces fragmentation (but still needs to call the constructor 
-and destructor). This should only be used for small objects which need to be very frequently 
-created and destroyed (which is something that should be avoided in a game engine). To use object 
-pools for a class, use the OryolClassPoolAllocDecl annotation macro:
-
-```cpp
-class MyPoolClass : public MyClass {
-    OryolClassPoolAllocDecl(MyClass);
-public:
-    ...  
-};
-```
-
-The pool allocator will allocate objects in chunks of 256, up to 256 chunks, and will never
-free claimed memory, so use this wisely.
-
-
-### Deferred Object Creation
-
-Sometimes the information of how to create an object must be handed around without actually
-creating the object immediately. An object which knows how to create another object is
-called a creator, and a class can be annotated to provide a static Creator() function
-which returns a creator object:
-
-```cpp
-class MyClass : public RefCounted {
-    OryolClassDecl(MyClass);
-    OryolClassCreator(MyClass);
-public:
-    ... 
-};
-```
-
-A creator is then created like this:
-
-```cpp
-// without constructor arguments:
-auto creator = MyClass::Creator();
-
-// with construction arguments
-auto creator = MyClass::Creator(arg1, arg2, arg3);
-```
-
-A creator is actually a std::function object, so to create an object just invoke operator():
-
-```cpp
-// create object from previously created creator
-Ptr<MyClass> myObj = creator();
-
-// or more C++11 style:
-auto myObj = creator(); 
-```
-
-### RTTI
-
-Runtime Type Information in Oryol is optional and per-class. The standard
-C++ RTTI language feature is not used and by default disabled (it can be enabled with
-the cmake option 'FIPS\_RTTI').
-
-RTTI is usually only necessary for safe downcasting from a parent class pointer
-to a subclass pointer and thus is rarely needed. If RTTI is needed,
-classes have to be annotated with the **OryolTypeDecl** and **OryolBaseTypeDecl**
-macros. The latter is needed in thr root class of an RTTI-enabled class
-hierarchy, and the former in derived classes, e.g.:
-
-```cpp
-// a base class in an RTTI-enabled class hierarchy:
-class A : public RefCounted {
-    OryolClassDecl(A);
-    OryolBaseTypeDecl(A);
-    ...
-};
-
-// an RTTI-enabled subclass of A
-class B : public A {
-    OryolClassDecl(B);
-    OryolTypeDecl(B, A);
-public:
-    ...
-};
-
-// another RTTI-enabled subclass of A
-class C : public A {
-    OryolClassDecl(C);
-    OryolTypeDecl(C, A);
-public:
-    ...
-```
-
-You can test whether an object is type-compatible (same class or parent class)
-with the **IsA()** template method:
-
-```cpp
-auto a = A::Create();
-auto b = B::Create();
-auto c = C::Create();
-
-// this is true since B is a subclass of A:
-if (b->IsA<A>()) {
-    // yep
-}
-
-// this is also true since C is a subclass of A:
-if (c->IsA<A>()) {
-    // yep
-}
-
-// this is false since B and C are not related:
-if (b->IsA<C>()) {
-    // nope
-}
-
-// this is false since A is not derived from B
-if (a->IsA<B>()) {
-    // nope
-}
-
-// testing for the actual class is also true of course
-if (a->IsA<A>()) {
-    // yep
-}
-```
-
-For safe downcasting, use the **DynamicCast()** method, currently this
-behaves like a standard *dynamic\_cast()* by returning a nullptr if the
-cast is not valid (NOTE: this may change in the future, and a fatal
-error may be thrown on an incompatible downcast):
-
-```cpp
-// assign Ptr<B> to a Ptr<A> and safely downcast back to a Ptr<B>
-Ptr<A> ab = b;                      // this is an implicit static cast checked at compile-time
-Ptr<B> bb = ab->DynamicCast<B>();   // performs a runtime check
-o_assert(bb);                       // this checks out
-
-// assign Ptr<B> to a Ptr<A>, and try to cast to Ptr<C>, which fails
-Ptr<A> ab = b;
-Ptr<C> cb = ab->DynamicCast<C>();   
-o_assert(cb);                       // this will fail
-```
-
-Oryol's RTTI system is small and fast, there's one byte of static storage added
-per RTTI-enabled class, and an RTTI check only involves a pointer-comparisions.
 
 ### Logging
 
@@ -453,3 +242,197 @@ There are a couple of C++ features which are black-listed on Oryol for various r
   code to be pulled into the executable, which is especially bad in emscripten
   where client-size matters.
 
+## Heap Objects, Lifetime Management, RTTI...
+
+> NOTE: Heap-allocated objects play a minor role in Oryol, you will hardly
+ever use heap objects in typical Oryol code, thus all the following information
+isn't required knowledge when working with Oryol, feel free to stop
+reading here :)
+
+### Class Annotation Macros
+
+When looking through Oryol header files you may wonder about macros inside
+class declarations like this:
+
+```cpp
+class MyClass : public BaseClass {
+    OryolClassDecl(MyClass);
+    OryolClassCreator(MyClass);
+public:
+    /// default constructor
+    MyClass();
+    ...
+};
+```
+
+*OryolClassDecl* and *OryolClassCreator*  are 'class annotation macros' which add some 
+Oryol-specific standard functionality to a class. 
+
+### Object Lifetime Management
+
+> NOTE: in general, allocating objects on the heap should be avoided if possible,
+> instead Oryol's philosophy is to pre-allocate fixed sized memory blocks and
+> object pools and keep dynamic allocations to a minimum
+
+Oryol applications should try to keep heap-allocated objects to a minimum, but if
+needed, Oryol's lifetime-managed heap objects using ref-counting and smart pointers
+should be used instead of raw new and delete calls.
+
+There's a few things to keep in mind when using ref-counted objects in Oryol:
+
+1. classes which use ref-counting should be subclasses of RefCounted (or provide a specific set of methods to manage the refcount, but that's an advanced topic)
+2. a class annotation macro must be used to add creation methods to refcounted class
+3. the Ptr<> class must be used as smart-pointer class
+
+With this in place, creating an object then looks like this:
+
+```cpp
+Ptr<MyClass> myObj = MyClass::Create();
+```
+
+The *Create()* method is added by the OryolClassDecl() macro in the class declaration:
+
+```cpp
+class MyClass : public RefCounted {
+    OryolClassDecl(MyClass);
+public:
+    ...
+};
+```
+
+Non-default constructors can be invoked through the Create method as well, and
+of course you can also use the new C++11 auto keyword:
+
+```cpp
+auto myObj = MyClass::Create(arg1, arg2, arg3);
+```
+
+> NOTE: Always keep in mind that there should be a good reason to use heap-allocated, 
+> ref-counted objects instead of stack-allocated or class-embedded objects. Always consider
+> stack-allocated objects and class-embedded objects first!
+
+### Deferred Object Creation
+
+Sometimes the information of how to create an object must be handed around without actually
+creating the object immediately. An object which knows how to create another object is
+called a creator, and a class can be annotated to provide a static Creator() function
+which returns a creator object:
+
+```cpp
+class MyClass : public RefCounted {
+    OryolClassDecl(MyClass);
+    OryolClassCreator(MyClass);
+public:
+    ... 
+};
+```
+
+A creator is then created like this:
+
+```cpp
+// without constructor arguments:
+auto creator = MyClass::Creator();
+
+// with construction arguments
+auto creator = MyClass::Creator(arg1, arg2, arg3);
+```
+
+A creator is actually a std::function object, so to create an object just invoke operator():
+
+```cpp
+// create object from previously created creator
+Ptr<MyClass> myObj = creator();
+
+// or more C++11 style:
+auto myObj = creator(); 
+```
+
+### RTTI
+
+Runtime Type Information in Oryol is optional and per-class. The standard
+C++ RTTI language feature is not used and by default disabled (it can be enabled with
+the cmake option 'FIPS\_RTTI').
+
+RTTI is usually only necessary for safe downcasting from a parent class pointer
+to a subclass pointer and thus is rarely needed. If RTTI is needed,
+classes have to be annotated with the **OryolTypeDecl** and **OryolBaseTypeDecl**
+macros. The latter is needed in thr root class of an RTTI-enabled class
+hierarchy, and the former in derived classes, e.g.:
+
+```cpp
+// a base class in an RTTI-enabled class hierarchy:
+class A : public RefCounted {
+    OryolClassDecl(A);
+    OryolBaseTypeDecl(A);
+    ...
+};
+
+// an RTTI-enabled subclass of A
+class B : public A {
+    OryolClassDecl(B);
+    OryolTypeDecl(B, A);
+public:
+    ...
+};
+
+// another RTTI-enabled subclass of A
+class C : public A {
+    OryolClassDecl(C);
+    OryolTypeDecl(C, A);
+public:
+    ...
+```
+
+You can test whether an object is type-compatible (same class or parent class)
+with the **IsA()** template method:
+
+```cpp
+auto a = A::Create();
+auto b = B::Create();
+auto c = C::Create();
+
+// this is true since B is a subclass of A:
+if (b->IsA<A>()) {
+    // yep
+}
+
+// this is also true since C is a subclass of A:
+if (c->IsA<A>()) {
+    // yep
+}
+
+// this is false since B and C are not related:
+if (b->IsA<C>()) {
+    // nope
+}
+
+// this is false since A is not derived from B
+if (a->IsA<B>()) {
+    // nope
+}
+
+// testing for the actual class is also true of course
+if (a->IsA<A>()) {
+    // yep
+}
+```
+
+For safe downcasting, use the **DynamicCast()** method, currently this
+behaves like a standard *dynamic\_cast()* by returning a nullptr if the
+cast is not valid (NOTE: this may change in the future, and a fatal
+error may be thrown on an incompatible downcast):
+
+```cpp
+// assign Ptr<B> to a Ptr<A> and safely downcast back to a Ptr<B>
+Ptr<A> ab = b;                      // this is an implicit static cast checked at compile-time
+Ptr<B> bb = ab->DynamicCast<B>();   // performs a runtime check
+o_assert(bb);                       // this checks out
+
+// assign Ptr<B> to a Ptr<A>, and try to cast to Ptr<C>, which fails
+Ptr<A> ab = b;
+Ptr<C> cb = ab->DynamicCast<C>();   
+o_assert(cb);                       // this will fail
+```
+
+Oryol's RTTI system is small and fast, there's one byte of static storage added
+per RTTI-enabled class, and an RTTI check only involves a pointer-comparisions.

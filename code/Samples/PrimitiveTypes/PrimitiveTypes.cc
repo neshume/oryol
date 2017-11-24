@@ -33,7 +33,7 @@ public:
     glm::mat4 proj;
     float angleX = 0.0f;
     float angleY = 0.0f;    
-    Shader::Params vsParams;
+    Shader::params params;
 };
 OryolMain(PrimitiveTypesApp);
 
@@ -44,8 +44,8 @@ createIndexMesh(int numIndices, const void* data, int dataSize) {
     setup.NumVertices = 0;
     setup.NumIndices = numIndices;
     setup.IndicesType = IndexType::Index16;
-    setup.DataVertexOffset = InvalidIndex;
-    setup.DataIndexOffset = 0;
+    setup.VertexDataOffset = InvalidIndex;
+    setup.IndexDataOffset = 0;
     return Gfx::CreateResource(setup, data, dataSize);
 }
 
@@ -74,9 +74,10 @@ PrimitiveTypesApp::OnInit() {
     MeshBuilder meshBuilder;
     meshBuilder.NumVertices = NumVertices;
     meshBuilder.IndicesType = IndexType::None;
-    meshBuilder.Layout
-        .Add(VertexAttr::Position, VertexFormat::Float3)
-        .Add(VertexAttr::Color0, VertexFormat::UByte4N);
+    meshBuilder.Layout = {
+        { VertexAttr::Position, VertexFormat::Float3 },
+        { VertexAttr::Color0, VertexFormat::UByte4N }
+    };
     meshBuilder.Begin();
     const float dx = 1.0f / NumX;
     const float dy = 1.0f / NumY;
@@ -199,7 +200,7 @@ PrimitiveTypesApp::OnInit() {
     const float fbHeight = (const float) Gfx::DisplayAttrs().FramebufferHeight;
     this->proj = glm::perspectiveFov(glm::radians(45.0f), fbWidth, fbHeight, 0.01f, 100.0f);
     this->view = glm::mat4();
-    this->vsParams.PointSize = 4.0f;
+    this->params.psize = 4.0f;
 
     return App::OnInit();
 }
@@ -214,10 +215,10 @@ PrimitiveTypesApp::OnRunning() {
     glm::mat4 model = glm::translate(glm::mat4(), glm::vec3(0.0f, 0.0f, -1.5f));
     model = glm::rotate(model, this->angleX, glm::vec3(1.0f, 0.0f, 0.0f));
     model = glm::rotate(model, this->angleY, glm::vec3(0.0f, 1.0f, 0.0f));
-    this->vsParams.ModelViewProjection = this->proj * this->view * model;
+    this->params.mvp = this->proj * this->view * model;
 
     // render the currently selected drawstate
-    Gfx::ApplyDefaultRenderTarget();
+    Gfx::BeginPass();
     int num = 0;
     switch (this->curPrimType) {
         case PrimitiveType::Points: num = NumVertices; break;
@@ -229,7 +230,7 @@ PrimitiveTypesApp::OnRunning() {
     }
     if (num > 0) {
         Gfx::ApplyDrawState(this->drawStates[this->curPrimType]);
-        Gfx::ApplyUniformBlock(this->vsParams);
+        Gfx::ApplyUniformBlock(this->params);
         Gfx::Draw(PrimitiveGroup(0, num));
     }
 
@@ -251,10 +252,10 @@ PrimitiveTypesApp::OnRunning() {
             this->curPrimType = PrimitiveType::TriangleStrip;
         }
         if (Input::KeyDown(Key::Right)) {
-            this->vsParams.PointSize += 1.0f;
+            this->params.psize += 1.0f;
         }
         if (Input::KeyDown(Key::Left)) {
-            this->vsParams.PointSize -= 1.0f;
+            this->params.psize -= 1.0f;
         }
     }
     if (Input::MouseAttached()) {
@@ -269,20 +270,21 @@ PrimitiveTypesApp::OnRunning() {
     }
 
     // print help- and status-text
-    Dbg::TextColor(glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
-    Dbg::PrintF("\n Point Size (left/right key to change): %d\n\r", int(this->vsParams.PointSize));
+    Dbg::TextColor(0.0f, 1.0f, 0.0f, 1.0f);
+    Dbg::PrintF("\n Point Size (left/right key to change): %d\n\r", int(this->params.psize));
     Dbg::Print(" Keys 1..5, left mouse button, or touch-tap to change primitive type\n\n\r");
     for (int i = 0; i < int(PrimitiveType::NumPrimitiveTypes); i++) {
         if (i == this->curPrimType) {
-            Dbg::TextColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+            Dbg::TextColor(1.0f, 0.0f, 0.0f, 1.0f);
         }
         else {
-            Dbg::TextColor(glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
+            Dbg::TextColor(1.0f, 1.0f, 0.0f, 1.0f);
         }
         Dbg::PrintF("\n\r %d: %s", i+1, PrimitiveType::ToString(PrimitiveType::Code(i)));
     }
 
     Dbg::DrawTextBuffer();
+    Gfx::EndPass();
     Gfx::CommitFrame();
 
     return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;

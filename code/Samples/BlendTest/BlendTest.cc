@@ -14,49 +14,20 @@ public:
     AppState::Code OnRunning();
     AppState::Code OnInit();
     AppState::Code OnCleanup();
-private:
+
     DrawState bgDrawState;
     Id triMesh;
     Id pipelines[BlendFactor::NumBlendFactors][BlendFactor::NumBlendFactors];
-    TriShader::Params params;
+    TriShader::params params;
 };
 OryolMain(BlendTestApp);
-
-//------------------------------------------------------------------------------
-AppState::Code
-BlendTestApp::OnRunning() {
-    
-    // draw checkboard background
-    Gfx::ApplyDefaultRenderTarget();
-    Gfx::ApplyDrawState(this->bgDrawState);
-    Gfx::Draw();
-
-    // draw blended triangles
-    DrawState triDrawState;
-    triDrawState.Mesh[0] = this->triMesh;
-    float d = 1.0f / BlendFactor::NumBlendFactors;
-    for (uint32_t y = 0; y < BlendFactor::NumBlendFactors; y++) {
-        for (uint32_t x = 0; x < BlendFactor::NumBlendFactors; x++) {
-            this->params.Translate.x = ((d * x) + d*0.5f) * 2.0f - 1.0f;
-            this->params.Translate.y = ((d * y) + d*0.5f) * 2.0f - 1.0f;
-            triDrawState.Pipeline = this->pipelines[y][x];
-            Gfx::ApplyDrawState(triDrawState);
-            Gfx::ApplyUniformBlock(this->params);
-            Gfx::Draw();
-        }
-    }
-    Gfx::CommitFrame();
-    
-    // continue running or quit?
-    return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
-}
 
 //------------------------------------------------------------------------------
 AppState::Code
 BlendTestApp::OnInit() {
     // setup rendering system
     auto gfxSetup = GfxSetup::Window(1024, 768, "Oryol Blend Sample");
-    gfxSetup.SetPoolSize(GfxResourceType::Pipeline, 512);
+    gfxSetup.ResourcePoolSize[GfxResourceType::Pipeline] =  512;
     Gfx::Setup(gfxSetup);
 
     // create pipeline object for a patterned background
@@ -70,9 +41,10 @@ BlendTestApp::OnInit() {
     MeshBuilder meshBuilder;
     meshBuilder.NumVertices = 3;
     meshBuilder.IndicesType = IndexType::None;
-    meshBuilder.Layout
-        .Add(VertexAttr::Position, VertexFormat::Float3)
-        .Add(VertexAttr::Color0, VertexFormat::Float4);
+    meshBuilder.Layout = {
+        { VertexAttr::Position, VertexFormat::Float3 },
+        { VertexAttr::Color0, VertexFormat::Float4 }
+    };
     meshBuilder.PrimitiveGroups.Add(0, 3);
     meshBuilder.Begin()
         .Vertex(0, VertexAttr::Position, 0.0f, 0.05f, 0.5f)
@@ -98,6 +70,36 @@ BlendTestApp::OnInit() {
     }
 
     return App::OnInit();
+}
+
+//------------------------------------------------------------------------------
+AppState::Code
+BlendTestApp::OnRunning() {
+    
+    // draw checkboard background
+    Gfx::BeginPass();
+    Gfx::ApplyDrawState(this->bgDrawState);
+    Gfx::Draw();
+
+    // draw blended triangles
+    DrawState triDrawState;
+    triDrawState.Mesh[0] = this->triMesh;
+    float d = 1.0f / BlendFactor::NumBlendFactors;
+    for (uint32_t y = 0; y < BlendFactor::NumBlendFactors; y++) {
+        for (uint32_t x = 0; x < BlendFactor::NumBlendFactors; x++) {
+            this->params.translate.x = ((d * x) + d*0.5f) * 2.0f - 1.0f;
+            this->params.translate.y = ((d * y) + d*0.5f) * 2.0f - 1.0f;
+            triDrawState.Pipeline = this->pipelines[y][x];
+            Gfx::ApplyDrawState(triDrawState);
+            Gfx::ApplyUniformBlock(this->params);
+            Gfx::Draw();
+        }
+    }
+    Gfx::EndPass();
+    Gfx::CommitFrame();
+    
+    // continue running or quit?
+    return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
 }
 
 //------------------------------------------------------------------------------

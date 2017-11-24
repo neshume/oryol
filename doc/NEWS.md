@@ -1,5 +1,53 @@
 # What's New
 
+- **22-May-2017**: I made some changes to Oryol's source file structure, code
+which uses the HTTP or Resource Module may need to be changed:
+  - I have moved module-private source files into subdirectories named 'private',
+    there are 3 reasons for this: 
+      1. when browsing the source it is now immediately obvious which parts 
+      of a module are private, and which parts of the module belong to its public
+      interface
+      2. public module headers should never include private headers, so that private
+      types don't leak into the outside world, this should make sure that 
+      code changes in the private area of a module are safe, and outside code
+      doesn't need to updated.
+      3. not including private headers in public headers allows for better
+      'include path hygiene', public header includes are easier to keep
+      under control, and platform-specific headers should never be able
+      to pollute a code base
+  - I have renamed the HTTP module to HttpFS, to make it clear that this
+    is just a filesystem implementation, not a general HTTP client module
+  - granular public headers in the Input and IO module have been merged into
+    a single InputTypes.h and IOTypes.h header
+  - all classes in the Resource module are now public, since the Resource
+    module is basically a resource-management building blocks module
+
+- **20-May-2017**: the spirv-tooling branch has been merged into master,
+shader code is now generated from a SPIRV intermediate byte code format,
+see this blog post for details and required source code changes: http://floooh.github.io/2017/05/15/oryol-spirv.html,
+and also check out [the new shader code documentation](../code/Modules/Gfx/doc/Shaders.md).
+The change also affects dependencies which include shader code:
+  
+  - https://github.com/floooh/oryol-imgui
+  - https://github.com/floooh/oryol-nuklear
+  - https://github.com/floooh/oryol-tbui
+  - https://github.com/floooh/oryol-samples
+  - https://github.com/floooh/yakc
+
+- **09-Apr-2017**: the big WebGL2/RenderPasses branch has finally been merged,
+see this blog post for details:https://floooh.github.io/2017/04/04/oryol-webgl2-merge.html
+This change also affects the following git repos:
+
+  - https://github.com/floooh/oryol-imgui
+  - https://github.com/floooh/oryol-nuklear
+  - https://github.com/floooh/oryol-tbui
+  - https://github.com/floooh/oryol-samples
+  - https://github.com/floooh/yakc
+
+- **23-Mar-2017**: initial gamepad support on HTML5, OSX, Linux and Windows has
+landed, see the Input module README and the new GamepadExplorer sample
+for details :)
+
 - **11-Jun-2016**: I have cleaned up the Input module API, unfortunately
 this breaks existing code. See the README in code/Modules/Input for 
 a complete documentation.

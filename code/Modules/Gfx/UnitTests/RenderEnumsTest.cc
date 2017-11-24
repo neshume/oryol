@@ -4,8 +4,8 @@
 #include "Pre.h"
 #include "UnitTest++/src/UnitTest++.h"
 #include "Core/String/String.h"
-#include "Gfx/Core/Enums.h"
-#include "Gfx/gl/gl_impl.h"
+#include "Gfx/GfxTypes.h"
+#include "Gfx/private/gl/gl_impl.h"
 #include <array>
 
 using namespace Oryol;
@@ -83,6 +83,27 @@ TEST(PixelFormatChannelBitsTest) {
     CHECK(PixelFormat::NumBits(PixelFormat::RGBA16F, PixelChannel::Depth) == 0);
     CHECK(PixelFormat::NumBits(PixelFormat::RGBA16F, PixelChannel::Stencil) == 0);
 
+    CHECK(PixelFormat::NumBits(PixelFormat::R32F, PixelChannel::Red) == 32);
+    CHECK(PixelFormat::NumBits(PixelFormat::R32F, PixelChannel::Green) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R32F, PixelChannel::Blue) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R32F, PixelChannel::Alpha) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R32F, PixelChannel::Depth) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R32F, PixelChannel::Stencil) == 0);
+
+    CHECK(PixelFormat::NumBits(PixelFormat::R16F, PixelChannel::Red) == 16);
+    CHECK(PixelFormat::NumBits(PixelFormat::R16F, PixelChannel::Green) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R16F, PixelChannel::Blue) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R16F, PixelChannel::Alpha) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R16F, PixelChannel::Depth) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R16F, PixelChannel::Stencil) == 0);
+
+    CHECK(PixelFormat::NumBits(PixelFormat::R10G10B10A2, PixelChannel::Red) == 10);
+    CHECK(PixelFormat::NumBits(PixelFormat::R10G10B10A2, PixelChannel::Green) == 10);
+    CHECK(PixelFormat::NumBits(PixelFormat::R10G10B10A2, PixelChannel::Blue) == 10);
+    CHECK(PixelFormat::NumBits(PixelFormat::R10G10B10A2, PixelChannel::Alpha) == 2);
+    CHECK(PixelFormat::NumBits(PixelFormat::R10G10B10A2, PixelChannel::Depth) == 0);
+    CHECK(PixelFormat::NumBits(PixelFormat::R10G10B10A2, PixelChannel::Stencil) == 0);
+
     // all other pixel formats must return 0 for all channels
     for (uint32_t pf = 0; pf < PixelFormat::NumPixelFormats; pf++) {
         if ((pf != PixelFormat::RGBA8) &&
@@ -94,7 +115,10 @@ TEST(PixelFormatChannelBitsTest) {
             (pf != PixelFormat::DEPTH) &&
             (pf != PixelFormat::DEPTHSTENCIL) &&
             (pf != PixelFormat::RGBA32F) &&
-            (pf != PixelFormat::RGBA16F)) {
+            (pf != PixelFormat::RGBA16F) &&
+            (pf != PixelFormat::R16F) &&
+            (pf != PixelFormat::R32F) &&
+            (pf != PixelFormat::R10G10B10A2)) {
             std::array<PixelChannel::Bits, 6> channels = { {PixelChannel::Red, PixelChannel::Green, PixelChannel::Blue, PixelChannel::Alpha, PixelChannel::Depth, PixelChannel::Stencil} };
             for (PixelChannel::Bits chn : channels) {
                 CHECK(PixelFormat::NumBits((PixelFormat::Code)pf, chn) == 0);
@@ -115,11 +139,14 @@ TEST(PixelFormatByteSizeTest) {
     CHECK(PixelFormat::ByteSize(PixelFormat::DEPTHSTENCIL) == 4);
     CHECK(PixelFormat::ByteSize(PixelFormat::RGBA32F) == 16);
     CHECK(PixelFormat::ByteSize(PixelFormat::RGBA16F) == 8);
+    CHECK(PixelFormat::ByteSize(PixelFormat::R16F) == 2);
+    CHECK(PixelFormat::ByteSize(PixelFormat::R32F) == 4);
+    CHECK(PixelFormat::ByteSize(PixelFormat::R10G10B10A2) == 4);
 }
 
 //------------------------------------------------------------------------------
 TEST(VertexFormatTest) {
-    CHECK(VertexFormat::NumVertexFormats == 12);
+    CHECK(VertexFormat::NumVertexFormats == 13);
     
     CHECK(VertexFormat::ByteSize(VertexFormat::Float) == 4);
     CHECK(VertexFormat::ByteSize(VertexFormat::Float2) == 8);
@@ -133,6 +160,7 @@ TEST(VertexFormatTest) {
     CHECK(VertexFormat::ByteSize(VertexFormat::Short2N) == 4);
     CHECK(VertexFormat::ByteSize(VertexFormat::Short4) == 8);
     CHECK(VertexFormat::ByteSize(VertexFormat::Short4N) == 8);
+    CHECK(VertexFormat::ByteSize(VertexFormat::UInt10_2N) == 4);
 }
 
 //------------------------------------------------------------------------------
@@ -155,5 +183,22 @@ TEST(VertexAttrTest) {
     CHECK(String(VertexAttr::ToString(VertexAttr::Instance1)) == "instance1");
     CHECK(String(VertexAttr::ToString(VertexAttr::Instance2)) == "instance2");
     CHECK(String(VertexAttr::ToString(VertexAttr::Instance3)) == "instance3");
+
+    CHECK(VertexAttr::FromString("position") == VertexAttr::Position);
+    CHECK(VertexAttr::FromString("normal") == VertexAttr::Normal);
+    CHECK(VertexAttr::FromString("texcoord0") == VertexAttr::TexCoord0);
+    CHECK(VertexAttr::FromString("texcoord1") == VertexAttr::TexCoord1);
+    CHECK(VertexAttr::FromString("texcoord2") == VertexAttr::TexCoord2);
+    CHECK(VertexAttr::FromString("texcoord3") == VertexAttr::TexCoord3);
+    CHECK(VertexAttr::FromString("tangent") == VertexAttr::Tangent);
+    CHECK(VertexAttr::FromString("binormal") == VertexAttr::Binormal);
+    CHECK(VertexAttr::FromString("weights") == VertexAttr::Weights);
+    CHECK(VertexAttr::FromString("indices") == VertexAttr::Indices);
+    CHECK(VertexAttr::FromString("color0") == VertexAttr::Color0);
+    CHECK(VertexAttr::FromString("color1") == VertexAttr::Color1);
+    CHECK(VertexAttr::FromString("instance0") == VertexAttr::Instance0);
+    CHECK(VertexAttr::FromString("instance1") == VertexAttr::Instance1);
+    CHECK(VertexAttr::FromString("instance2") == VertexAttr::Instance2);
+    CHECK(VertexAttr::FromString("instance3") == VertexAttr::Instance3);    
 }
 

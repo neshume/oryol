@@ -7,7 +7,6 @@
 #include "Core/Assertion.h"
 #include "Core/Logger.h"
 #include "Core/StackTrace.h"
-#include "Core/Threading/RWLock.h"
 #include "Core/Containers/Array.h"
 #if ORYOL_WINDOWS
 #include <Windows.h>
@@ -15,12 +14,17 @@
 #if ORYOL_ANDROID
 #include <android/log.h>
 #endif
-#if ORYOL_PNACL
-#include "Core/pnacl/pnaclInstance.h"
+
+#if ORYOL_HAS_THREADS
+#include <mutex>
+static std::mutex lockMutex;
+#define SCOPED_LOCK std::lock_guard<std::mutex> lock(lockMutex)
+#else
+#define SCOPED_LOCK
 #endif
 
-#if ORYOL_WINDOWS || ORYOL_PNACL
-const int LogBufSize = 4 * 1024;
+#if ORYOL_WINDOWS
+static const int LogBufSize = 4 * 1024;
 #endif
 
 namespace Oryol {
@@ -28,17 +32,15 @@ namespace Oryol {
 using namespace _priv;
 using namespace std;
 
-Log::Level curLogLevel = Log::Level::Dbg;
-RWLock lock;
-Array<Ptr<Logger>> loggers;
+static Log::Level curLogLevel = Log::Level::Dbg;
+static Array<Ptr<Logger>> loggers;
 
 //------------------------------------------------------------------------------
 void
 Log::AddLogger(const Ptr<Logger>& l) {
     if (l) {
-        lock.LockWrite();
+        SCOPED_LOCK;
         loggers.Add(l);
-        lock.UnlockWrite();
     }
 }
 
@@ -145,7 +147,7 @@ Log::VError(const char* msg, va_list args) {
 //------------------------------------------------------------------------------
 void
 Log::vprint(Level lvl, const char* msg, va_list args) {
-    lock.LockRead();
+    SCOPED_LOCK;
     if (loggers.Empty()) {
         #if ORYOL_ANDROID
             android_LogPriority pri = ANDROID_LOG_DEFAULT;
@@ -158,7 +160,7 @@ Log::vprint(Level lvl, const char* msg, va_list args) {
             }
             __android_log_vprint(pri, "oryol", msg, args);
         #else
-            #if ORYOL_WINDOWS || ORYOL_PNACL
+            #if ORYOL_WINDOWS
             va_list argsCopy;
             va_copy(argsCopy, args);
             #endif
@@ -167,25 +169,12 @@ Log::vprint(Level lvl, const char* msg, va_list args) {
             // va_list, so we made a copy before if necessary
             std::vprintf(msg, args);
 
-            #if ORYOL_WINDOWS || ORYOL_PNACL
+            #if ORYOL_WINDOWS
                 char buf[LogBufSize];
                 std::vsnprintf(buf, sizeof(buf), msg, argsCopy);
                 #if ORYOL_WINDOWS
                     buf[LogBufSize - 1] = 0;
                     OutputDebugStringA(buf);
-                #elif ORYOL_PNACL
-                    // replace non-jsonable characters 
-                    char* p = buf;
-                    do {
-                        if (*p == '"') *p = '\'';
-                        else if (*p == '\n') *p = ' ';
-                    }
-                    while (*p++);
-                    char json[LogBufSize + 64];
-                    std::snprintf(json, sizeof(json), "{\"msg\":\"log\",\"val\":\"%s\"}", buf); 
-                    if (pnaclInstance::HasInstance()) {
-                        pnaclInstance::Instance()->putMsg(json);
-                    }
                 #endif
             #endif
         #endif
@@ -195,13 +184,12 @@ Log::vprint(Level lvl, const char* msg, va_list args) {
             l->VPrint(lvl, msg, args);
         }
     }
-    lock.UnlockRead();
 }
 
 //------------------------------------------------------------------------------
 void
 Log::AssertMsg(const char* cond, const char* msg, const char* file, int line, const char* func) {
-    lock.LockRead();
+    SCOPED_LOCK;
     if (loggers.Empty()) {
         char callstack[4096];
         StackTrace::Dump(callstack, sizeof(callstack));
@@ -217,14 +205,6 @@ Log::AssertMsg(const char* cond, const char* msg, const char* file, int line, co
                             cond, msg ? msg : "none", file, line, func, callstack);
                 buf[LogBufSize - 1] = 0;
                 OutputDebugStringA(buf);
-            #elif ORYOL_PNACL
-                if (pnaclInstance::HasInstance()) {
-                    char buf[LogBufSize];
-                    std::snprintf(buf, sizeof(buf), "{\"msg\":\"log\",\"val\":\"\n\n*** ORYOL ASSERT: %s\n  msg=%s\n  file=%s\n  line=%d\n  func=%s  callstack:\n%s\n\"}",
-                                  cond, msg ? msg : "none", file, line, func, callstack);
-                    buf[LogBufSize - 1] = 0;                
-                    pnaclInstance::Instance()->putMsg(buf);
-                }
             #endif
         #endif
     }
@@ -234,7 +214,6 @@ Log::AssertMsg(const char* cond, const char* msg, const char* file, int line, co
             l->AssertMsg(cond, msg, file, line, func);
         }
     }
-    lock.UnlockRead();
 } 
 
 } // namespace Oryol

@@ -3,13 +3,13 @@
 //------------------------------------------------------------------------------
 #include "Pre.h"
 #include "UnitTest++/src/UnitTest++.h"
-#include "Gfx/Resource/factory.h"
-#include "Gfx/Resource/resourcePools.h"
-#include "Gfx/Core/displayMgr.h"
-#include "Gfx/Core/renderer.h"
+#include "Gfx/private/gfxFactory.h"
+#include "Gfx/private/resourcePools.h"
+#include "Gfx/private/displayMgr.h"
+#include "Gfx/private/renderer.h"
 
 #if ORYOL_OPENGL
-#include "Gfx/gl/gl_impl.h"
+#include "Gfx/private/gl/gl_impl.h"
 #endif
 
 using namespace Oryol;
@@ -35,17 +35,16 @@ TEST(RenderTargetCreationTest) {
     
     // setup a meshFactory object
     renderer.setup(gfxSetup, ptrs);
-    textureFactory factory;
-    factory.Setup(ptrs);
+    gfxFactory factory;
+    factory.setup(ptrs);
     
     // create a render target (no depth buffer)
-    auto texSetup = TextureSetup::RenderTarget(320, 256);
+    auto texSetup = TextureSetup::RenderTarget2D(320, 256);
     texSetup.ColorFormat = PixelFormat::RGBA8;
     texture tex0;
     tex0.Setup = texSetup;
-    factory.SetupResource(tex0);
+    factory.initTexture(tex0, nullptr, 0);
     CHECK(tex0.glTextures[0] != 0);
-    CHECK(tex0.glFramebuffer != 0);
     CHECK(tex0.glDepthRenderbuffer == 0);
     const TextureAttrs& attrs0 = tex0.textureAttrs;
     CHECK(attrs0.Locator == Locator::NonShared());
@@ -55,21 +54,19 @@ TEST(RenderTargetCreationTest) {
     CHECK(attrs0.TextureUsage == Usage::Immutable);
     CHECK(attrs0.Width == 320);
     CHECK(attrs0.Height == 256);
-    CHECK(attrs0.Depth == 0);
+    CHECK(attrs0.Depth == 1);
     CHECK(1 == attrs0.NumMipMaps);
     CHECK(attrs0.IsRenderTarget);
     CHECK(!attrs0.HasDepthBuffer);
-    CHECK(!attrs0.HasSharedDepthBuffer);
 
     // create a render target with depth buffer
-    auto rtSetup = TextureSetup::RenderTarget(640, 480);
+    auto rtSetup = TextureSetup::RenderTarget2D(640, 480);
     rtSetup.ColorFormat = PixelFormat::RGBA8;
     rtSetup.DepthFormat = PixelFormat::DEPTHSTENCIL;
     texture tex1;
     tex1.Setup = rtSetup;
-    factory.SetupResource(tex1);
+    factory.initTexture(tex1, nullptr, 0);
     CHECK(tex1.glTextures[0] != 0);
-    CHECK(tex1.glFramebuffer != 0);
     CHECK(tex1.glDepthRenderbuffer != 0);
     const TextureAttrs& attrs1 = tex1.textureAttrs;
     CHECK(attrs1.Locator == Locator::NonShared());
@@ -79,45 +76,18 @@ TEST(RenderTargetCreationTest) {
     CHECK(attrs1.TextureUsage == Usage::Immutable);
     CHECK(attrs1.Width == 640);
     CHECK(attrs1.Height == 480);
-    CHECK(attrs1.Depth == 0);
+    CHECK(attrs1.Depth == 1);
     CHECK(1 == attrs1.NumMipMaps);
     CHECK(attrs1.IsRenderTarget);
     CHECK(attrs1.HasDepthBuffer);
-    CHECK(!attrs1.HasSharedDepthBuffer);
 
-    // create relative-size render target with depth buffer
-    rtSetup = TextureSetup::RelSizeRenderTarget(1.0f, 1.0f);
-    rtSetup.ColorFormat = PixelFormat::RGBA8;
-    rtSetup.DepthFormat = PixelFormat::DEPTH;
-    texture tex2;
-    tex2.Setup = rtSetup;
-    factory.SetupResource(tex2);
-    CHECK(tex2.glTextures[0] != 0);
-    CHECK(tex2.glFramebuffer != 0);
-    CHECK(tex2.glDepthRenderbuffer != 0);
-    const TextureAttrs& attrs2 = tex2.textureAttrs;
-    CHECK(attrs2.Locator == Locator::NonShared());
-    CHECK(attrs2.Type == TextureType::Texture2D);
-    CHECK(attrs2.ColorFormat == PixelFormat::RGBA8);
-    CHECK(attrs2.DepthFormat == PixelFormat::DEPTH);
-    CHECK(attrs2.TextureUsage == Usage::Immutable);
-    CHECK(attrs2.Width == 400);
-    CHECK(attrs2.Height == 300);
-    CHECK(attrs2.Depth == 0);
-    CHECK(1 == attrs2.NumMipMaps);
-    CHECK(attrs2.IsRenderTarget);
-    CHECK(attrs2.HasDepthBuffer);
-    CHECK(!attrs2.HasSharedDepthBuffer);
-    
     // cleanup
-    factory.DestroyResource(tex1);
+    factory.destroyTexture(tex1);
     CHECK(tex1.glTextures[0] == 0);
-    CHECK(tex1.glFramebuffer == 0);
     CHECK(tex1.glDepthRenderbuffer == 0);
     
-    factory.DestroyResource(tex0);
-    factory.DestroyResource(tex2);
-    factory.Discard();
+    factory.destroyTexture(tex0);
+    factory.discard();
     renderer.discard();
     displayManager.DiscardDisplay();
     #endif

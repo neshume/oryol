@@ -42,9 +42,9 @@ TEST(ArrayTest) {
     
     // add some elements
     const int one = 1;
-    array0.Add(0);
-    array0.Add(one);
-    array0.Add(2);
+    CHECK(array0.Add(0) == 0);
+    CHECK(array0.Add(one) == one);
+    CHECK(array0.Add(2) == 2);
     CHECK(array0.Size() == 3);
     CHECK(array0.Capacity() == ORYOL_CONTAINER_DEFAULT_MIN_GROW);
     CHECK(!array0.Empty());
@@ -288,6 +288,17 @@ TEST(ArrayTest) {
     CHECK(array2.FindIndexLinear(7, 3, InvalidIndex) == 3);
     CHECK(array2.FindIndexLinear(11) == 5);
     
+    // reverse sort
+    std::sort(array2.begin(), array2.end(), [](int a, int b) {
+        return b < a;
+    });
+    CHECK(array2[0] == 11);
+    CHECK(array2[1] == 9);
+    CHECK(array2[2] == 7);
+    CHECK(array2[3] == 3);
+    CHECK(array2[4] == 2);
+    CHECK(array2[5] == 1);
+
     // construct from initializer list
     Array<String> array4( { "Bla", "Blub", "Blob", "Blubber" } );
     CHECK(array4.Size() == 4);
@@ -328,5 +339,58 @@ TEST(ArrayTest) {
     CHECK(popArray.PopFront() == 1);
     CHECK(popArray.Size() == 6);
     CHECK(popArray.Front() == 2);
+    
+    // EraseRange
+    Array<int> array6;
+    for (int i = 0; i < 16; i++) {
+        array6.Add(i);
+    }
+    CHECK(array6.Size() == 16);
+    array6.EraseRange(0, 3);
+    CHECK(array6.Size() == 13);
+    CHECK(array6[0] == 3);
+    CHECK(array6[1] == 4);
+    array6.EraseRange(2, 3);
+    CHECK(array6.Size() == 10);
+    CHECK(array6[0] == 3);
+    CHECK(array6[1] == 4);
+    CHECK(array6[2] == 8);
+    CHECK(array6[3] == 9);
+    array6.EraseRange(7, 3);
+    CHECK(array6.Size() == 7);
+    CHECK(array6[0] == 3);
+    CHECK(array6[1] == 4);
+    CHECK(array6[2] == 8);
+    CHECK(array6[3] == 9);
+    CHECK(array6[6] == 12);
+
+    // MakeSlice
+    Array<int> array7 = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+    Slice<int> slice = array7.MakeSlice(3, 4);
+    CHECK(slice.Size() == 4);
+    CHECK(slice.Offset() == 3);
+    CHECK(slice[0] == 4);
+    CHECK(slice[1] == 5);
+    CHECK(slice[2] == 6);
+    CHECK(slice[3] == 7);
+    CHECK(slice.begin() == &array7[3]);
+    CHECK(slice.end() == &array7[7]);
+    slice[0] = 123;
+    CHECK(array7[3] == 123);
+
+    // array view over full array
+    slice = array7.MakeSlice();
+    CHECK(slice.Size() == 10);
+    CHECK(slice.Offset() == 0);
+    CHECK(slice[0] == 1);
+    CHECK(slice[9] == 10);
+
+    // fixed capacity
+    Array<int> array8;
+    array8.SetFixedCapacity(128);
+    CHECK(array8.Size() == 0);
+    CHECK(array8.Capacity() == 128);
+    CHECK(array8.GetMinGrow() == 0);
+    CHECK(array8.GetMaxGrow() == 0);
 }
 

@@ -24,9 +24,8 @@
         Callback("name", pri, std::function<void()>(&MyClass::MyMethod, &myObj));
 */
 #include <functional>
-#include "Core/RefCounted.h"
-#include "Core/String/StringAtom.h"
 #include "Core/Containers/Map.h"
+#include "Core/Containers/Set.h"
 
 namespace Oryol {
 

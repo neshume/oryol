@@ -7,6 +7,7 @@
 */
 #include "Core/Types.h"
 #include "Core/Assertion.h"
+#include "Core/Containers/Slice.h"
 #include <utility>
 
 namespace Oryol {
@@ -31,6 +32,8 @@ public:
     TYPE& operator[](int index);
     /// read-only access single element
     const TYPE& operator[](int index) const;
+    /// get a slice into the array
+    Slice<TYPE> MakeSlice(int offset=0, int numItems=EndOfRange);
     
     /// fill the array with a value
     void Fill(const TYPE& val);
@@ -105,7 +108,16 @@ StaticArray<TYPE, SIZE>::operator[](int index) const {
     o_assert_range_dbg(index, SIZE);
     return this->items[index];
 }
-    
+
+//------------------------------------------------------------------------------
+template<class TYPE, int SIZE> Slice<TYPE>
+StaticArray<TYPE, SIZE>::MakeSlice(int offset, int numItems) {
+    if (numItems == EndOfRange) {
+        numItems = SIZE - offset;
+    }
+    return Slice<TYPE>(&this->items[0], SIZE, offset, numItems);
+}
+
 //------------------------------------------------------------------------------
 template<class TYPE, int SIZE> void
 StaticArray<TYPE, SIZE>::Fill(const TYPE& val) {

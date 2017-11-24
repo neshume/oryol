@@ -8,6 +8,7 @@
 
 namespace Oryol {
 
+// those typedefs are obsolete, don't use
 typedef int8_t int8;
 typedef uint8_t uint8;
 typedef int16_t int16;
@@ -20,12 +21,12 @@ typedef float float32;
 typedef double float64;
 typedef intptr_t intptr;
 typedef uintptr_t uintptr;
-
 typedef unsigned char uchar;
 
 static const int32_t InvalidIndex = -1;
 static const int32_t EndOfString = -1;
 static const int32_t EndOfFile = -1;
+static const int32_t EndOfRange = -1;
 
 } // namespace Oryol
 

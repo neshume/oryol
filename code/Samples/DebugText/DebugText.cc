@@ -3,6 +3,7 @@
 //------------------------------------------------------------------------------
 #include "Pre.h"
 #include "Core/Main.h"
+#include "Core/String/StringBuilder.h"
 #include "Gfx/Gfx.h"
 #include "Dbg/Dbg.h"
 #include "glm/gtc/random.hpp"
@@ -15,7 +16,6 @@ public:
     AppState::Code OnInit();
     AppState::Code OnCleanup();
     
-private:
     void dropChar();
     void moveChars();
     void drawText();
@@ -24,9 +24,29 @@ private:
     int height;
     uint8_t* buffer = nullptr;
     StringBuilder strBuilder;
-    ClearState clearState;
 };
 OryolMain(DebugTextApp);
+
+//------------------------------------------------------------------------------
+AppState::Code
+DebugTextApp::OnInit() {
+    auto gfxSetup = GfxSetup::Window(800, 600, "Oryol DebugText Sample");
+    gfxSetup.DefaultPassAction = PassAction::Clear(glm::vec4(0.5f, 0.5f, 0.5f, 1.0f));
+    Gfx::Setup(gfxSetup);
+    DbgSetup dbgSetup;
+    dbgSetup.TextScaleX = 2.0f;
+    dbgSetup.TextScaleY = 2.0f;
+    Dbg::Setup(dbgSetup);
+    
+    this->width = Gfx::DisplayAttrs().FramebufferWidth / 16;
+    this->height = Gfx::DisplayAttrs().FramebufferHeight / 16;
+    this->buffer = (uint8_t*) Memory::Alloc(this->width * this->height);
+    Memory::Clear(this->buffer, this->width * this->height);
+
+    this->strBuilder.Reserve(this->width * 2);
+    
+    return App::OnInit();
+}
 
 //------------------------------------------------------------------------------
 AppState::Code
@@ -36,30 +56,13 @@ DebugTextApp::OnRunning() {
     this->moveChars();
     this->drawText();
     
-    Gfx::ApplyDefaultRenderTarget(this->clearState);
+    Gfx::BeginPass();
     Dbg::DrawTextBuffer();
+    Gfx::EndPass();
     Gfx::CommitFrame();
     
     // continue running or quit?
     return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
-}
-
-//------------------------------------------------------------------------------
-AppState::Code
-DebugTextApp::OnInit() {
-    Gfx::Setup(GfxSetup::Window(800, 600, "Oryol DebugText Sample"));
-    Dbg::Setup();
-    Dbg::SetTextScale(glm::vec2(2.0f, 2.0f));
-    
-    this->width = Gfx::DisplayAttrs().FramebufferWidth / 16;
-    this->height = Gfx::DisplayAttrs().FramebufferHeight / 16;
-    this->buffer = (uint8_t*) Memory::Alloc(this->width * this->height);
-    Memory::Clear(this->buffer, this->width * this->height);
-    this->clearState.Color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-    
-    this->strBuilder.Reserve(this->width * 2);
-    
-    return App::OnInit();
 }
 
 //------------------------------------------------------------------------------
@@ -114,10 +117,10 @@ DebugTextApp::moveChars() {
 void
 DebugTextApp::drawText() {
     
-    glm::vec4 color[3] = {
-        glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
-        glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
-        glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)
+    float color[3][4] = {
+        { 1.0f, 0.0f, 0.0f, 1.0f },
+        { 0.0f, 1.0f, 0.0f, 1.0f },
+        { 0.0f, 0.0f, 1.0f, 1.0 }
     };
     
     for (int y = 0; y < this->height; y++) {
@@ -126,14 +129,14 @@ DebugTextApp::drawText() {
         for (int x = 0; x < this->width; x++) {
             char c = this->buffer[yOffset + x];
             if (0 == c) {
-                strBuilder.Append(0x09);    // cursor right
+                strBuilder.Append(0x20);    // replace 0 with space
             }
             else {
                 strBuilder.Append(c);
             }
         }
         strBuilder.Append("\r\n");
-        Dbg::TextColor(color[y % 3]);
+        Dbg::TextColor(color[y%3][0], color[y%3][1], color[y%3][2], color[y%3][3]);
         Dbg::Print(strBuilder.AsCStr());
     }
 }

@@ -4,7 +4,7 @@
 #include "Pre.h"
 #include "Core/Main.h"
 #include "IO/IO.h"
-#include "HTTP/HTTPFileSystem.h"
+#include "HttpFS/HTTPFileSystem.h"
 #include "Gfx/Gfx.h"
 #include "Assets/Gfx/ShapeBuilder.h"
 #include "Assets/Gfx/TextureLoader.h"
@@ -20,43 +20,16 @@ public:
     AppState::Code OnInit();
     AppState::Code OnCleanup();
     
-private:
     glm::mat4 computeMVP(const glm::vec3& pos);
 
     DrawState drawState;
-    Shader::VSParams vsParams;
+    Shader::vsParams vsParams;
     glm::mat4 view;
     glm::mat4 proj;
     float angleX = 0.0f;
     float angleY = 0.0f;
-    ClearState clearState;
 };
 OryolMain(DDSCubeMapApp);
-
-//------------------------------------------------------------------------------
-AppState::Code
-DDSCubeMapApp::OnRunning() {
-    
-    // update rotation angles
-    this->angleY += 0.02f;
-    this->angleX += 0.01f;
-    
-    // apply state and draw
-    Gfx::ApplyDefaultRenderTarget(this->clearState);
-    
-    // check whether the cube map has finished loading
-    const Id& tex = this->drawState.FSTexture[Textures::Texture];
-    if (Gfx::QueryResourceInfo(tex).State == ResourceState::Valid) {
-        this->vsParams.ModelViewProjection = this->computeMVP(glm::vec3(0.0f, 0.0f, 0.0f));
-        Gfx::ApplyDrawState(this->drawState);
-        Gfx::ApplyUniformBlock(this->vsParams);
-        Gfx::Draw();
-    }
-    Gfx::CommitFrame();
-    
-    // continue running or quit?
-    return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
-}
 
 //------------------------------------------------------------------------------
 AppState::Code
@@ -70,6 +43,7 @@ DDSCubeMapApp::OnInit() {
 
     // setup rendering system
     auto gfxSetup = GfxSetup::Window(600, 400, "Oryol DXT Cube Map Sample");
+    gfxSetup.DefaultPassAction = PassAction::Clear(glm::vec4(0.5f, 0.5f, 0.5f, 1.0f));
     Gfx::Setup(gfxSetup);
 
     // create resources
@@ -87,22 +61,22 @@ DDSCubeMapApp::OnInit() {
     else {
         texPath = "tex:romechurch_dxt1.dds";
     }
-    this->drawState.FSTexture[Textures::Texture] = Gfx::LoadResource(
+    this->drawState.FSTexture[Shader::tex] = Gfx::LoadResource(
         TextureLoader::Create(TextureSetup::FromFile(texPath, texBluePrint))
     );
     glm::mat4 rot90 = glm::rotate(glm::mat4(), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     ShapeBuilder shapeBuilder;
-    shapeBuilder.Layout
-        .Add(VertexAttr::Position, VertexFormat::Float3)
-        .Add(VertexAttr::Normal, VertexFormat::Float3);
+    shapeBuilder.Layout = {
+        { VertexAttr::Position, VertexFormat::Float3 },
+        { VertexAttr::Normal, VertexFormat::Float3 }
+    };
     shapeBuilder.Transform(rot90).Sphere(1.0f, 36, 20);
     this->drawState.Mesh[0] = Gfx::CreateResource(shapeBuilder.Build());
     auto ps = PipelineSetup::FromLayoutAndShader(shapeBuilder.Layout, shd);
     ps.DepthStencilState.DepthWriteEnabled = true;
     ps.DepthStencilState.DepthCmpFunc = CompareFunc::LessEqual;
     this->drawState.Pipeline = Gfx::CreateResource(ps);
-    this->clearState.Color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-    
+
     // setup projection and view matrices
     const float fbWidth = (const float) Gfx::DisplayAttrs().FramebufferWidth;
     const float fbHeight = (const float) Gfx::DisplayAttrs().FramebufferHeight;
@@ -110,6 +84,29 @@ DDSCubeMapApp::OnInit() {
     this->view = glm::mat4();
     
     return App::OnInit();
+}
+
+//------------------------------------------------------------------------------
+AppState::Code
+DDSCubeMapApp::OnRunning() {
+    
+    // update rotation angles
+    this->angleY += 0.02f;
+    this->angleX += 0.01f;
+    
+    Gfx::BeginPass();
+    const Id& tex = this->drawState.FSTexture[Shader::tex];
+    if (Gfx::QueryResourceInfo(tex).State == ResourceState::Valid) {
+        this->vsParams.mvp = this->computeMVP(glm::vec3(0.0f, 0.0f, 0.0f));
+        Gfx::ApplyDrawState(this->drawState);
+        Gfx::ApplyUniformBlock(this->vsParams);
+        Gfx::Draw();
+    }
+    Gfx::EndPass();
+    Gfx::CommitFrame();
+    
+    // continue running or quit?
+    return Gfx::QuitRequested() ? AppState::Cleanup : AppState::Running;
 }
 
 //------------------------------------------------------------------------------

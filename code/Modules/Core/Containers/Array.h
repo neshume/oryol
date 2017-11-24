@@ -33,6 +33,7 @@
 */
 #include "Core/Config.h"
 #include "Core/Containers/elementBuffer.h"
+#include "Core/Containers/Slice.h"
 #include <initializer_list>
 
 namespace Oryol {
@@ -57,6 +58,8 @@ public:
     
     /// set allocation strategy
     void SetAllocStrategy(int minGrow_, int maxGrow_=ORYOL_CONTAINER_DEFAULT_MAX_GROW);
+    /// initialize the array to a fixed capacity (guarantees that no re-allocs happen)
+    void SetFixedCapacity(int fixedCapacity);
     /// get min grow value
     int GetMinGrow() const;
     /// get max grow value
@@ -70,18 +73,20 @@ public:
     /// get number of free slots at back of array
     int Spare() const;
     
-    /// read/write access single element
+    /// read/write access an existing element
     TYPE& operator[](int index);
-    /// read-only access single element
+    /// read-only access to existing element
     const TYPE& operator[](int index) const;
-    /// read/write access to first element
+    /// read/write access to first element (must exists)
     TYPE& Front();
-    /// read-only access to first element
+    /// read-only access to first element (must exist)
     const TYPE& Front() const;
-    /// read/write access to last element
+    /// read/write access to last element (must exist)
     TYPE& Back();
-    /// read-only access to last element
+    /// read-only access to last element (must exist)
     const TYPE& Back() const;
+    /// get a slice into the array (beware of iterator-invalidation!)
+    Slice<TYPE> MakeSlice(int offset=0, int numItems=EndOfRange);
 
     /// increase capacity to hold at least numElements more elements
     void Reserve(int numElements);
@@ -91,11 +96,11 @@ public:
     void Clear();
     
     /// copy-add element to back of array
-    void Add(const TYPE& elm);
+    TYPE& Add(const TYPE& elm);
     /// move-add element to back of array
-    void Add(TYPE&& elm);
+    TYPE& Add(TYPE&& elm);
     /// construct-add new element at back of array
-    template<class... ARGS> void Add(ARGS&&... args);
+    template<class... ARGS> TYPE& Add(ARGS&&... args);
     /// copy-insert element at index, keep array order
     void Insert(int index, const TYPE& elm);
     /// move-insert element at index, keep array order
@@ -105,7 +110,7 @@ public:
     TYPE PopBack();
     /// pop the first element
     TYPE PopFront();
-    /// erase element at index, keep element ordering
+    /// erase element at index, keep element order
     void Erase(int index);
     /// erase element at index, swap-in front or back element (destroys element ordering)
     void EraseSwap(int index);
@@ -113,6 +118,8 @@ public:
     void EraseSwapBack(int index);
     /// erase element at index, always swap-in from front (destroys element ordering)
     void EraseSwapFront(int index);
+    /// erase a range of elements, keep element order
+    void EraseRange(int index, int num);
     
     /// find element index with slow linear search, return InvalidIndex if not found
     int FindIndexLinear(const TYPE& elm, int startIndex=0, int endIndex=InvalidIndex) const;
@@ -208,6 +215,16 @@ Array<TYPE>::SetAllocStrategy(int minGrow_, int maxGrow_) {
 }
 
 //------------------------------------------------------------------------------
+template<class TYPE> void
+Array<TYPE>::SetFixedCapacity(int fixedCapacity) {
+    this->minGrow = 0;
+    this->maxGrow = 0;
+    if (fixedCapacity > this->buffer.capacity()) {
+        this->adjustCapacity(fixedCapacity);
+    }
+}
+
+//------------------------------------------------------------------------------
 template<class TYPE> int
 Array<TYPE>::GetMinGrow() const {
         return this->minGrow;
@@ -280,6 +297,15 @@ Array<TYPE>::Back() const {
 }
 
 //------------------------------------------------------------------------------
+template<class TYPE> Slice<TYPE>
+Array<TYPE>::MakeSlice(int offset, int numItems) {
+    if (numItems == EndOfRange) {
+        numItems = this->buffer.size() - offset;
+    }
+    return Slice<TYPE>(this->buffer.buf, this->buffer.size(), offset, numItems);
+}
+
+//------------------------------------------------------------------------------
 template<class TYPE> void
 Array<TYPE>::Reserve(int numElements) {
     int newCapacity = this->buffer.size() + numElements;
@@ -304,21 +330,23 @@ Array<TYPE>::Clear() {
 }
 
 //------------------------------------------------------------------------------
-template<class TYPE> void
+template<class TYPE> TYPE&
 Array<TYPE>::Add(const TYPE& elm) {
     if (this->buffer.backSpare() == 0) {
         this->grow();
     }
     this->buffer.pushBack(elm);
+    return this->buffer.back();
 }
 
 //------------------------------------------------------------------------------
-template<class TYPE> void
+template<class TYPE> TYPE&
 Array<TYPE>::Add(TYPE&& elm) {
     if (this->buffer.backSpare() == 0) {
         this->grow();
     }
     this->buffer.pushBack(std::move(elm));
+    return this->buffer.back();
 }
     
 //------------------------------------------------------------------------------
@@ -337,15 +365,17 @@ Array<TYPE>::Insert(int index, TYPE&& elm) {
         this->grow();
     }
     this->buffer.insert(index, std::move(elm));
+
 }
 
 //------------------------------------------------------------------------------
-template<class TYPE> template<class... ARGS> void
+template<class TYPE> template<class... ARGS> TYPE&
 Array<TYPE>::Add(ARGS&&... args) {
     if (this->buffer.backSpare() == 0) {
         this->grow();
     }
     this->buffer.emplaceBack(std::forward<ARGS>(args)...);
+    return this->buffer.back();
 }
 
 //------------------------------------------------------------------------------
@@ -383,7 +413,13 @@ template<class TYPE> void
 Array<TYPE>::EraseSwapFront(int index) {
     this->buffer.eraseSwapFront(index);
 }
-    
+
+//------------------------------------------------------------------------------
+template<class TYPE> void
+Array<TYPE>::EraseRange(int index, int num) {
+    this->buffer.eraseRange(index, num);
+}
+
 //------------------------------------------------------------------------------
 template<class TYPE> int
 Array<TYPE>::FindIndexLinear(const TYPE& elm, int startIndex, int endIndex) const {

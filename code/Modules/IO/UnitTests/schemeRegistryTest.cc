@@ -4,13 +4,13 @@
 #include "Pre.h"
 #include "UnitTest++/src/UnitTest++.h"
 #include "Core/Core.h"
-#include "IO/FS/FileSystem.h"
-#include "IO/Core/schemeRegistry.h"
+#include "IO/FileSystemBase.h"
+#include "IO/private/schemeRegistry.h"
 
 using namespace Oryol;
 using namespace Oryol::_priv;
 
-class TestFS_A : public FileSystem {
+class TestFS_A : public FileSystemBase {
     OryolClassDecl(TestFS_A);
     OryolClassCreator(TestFS_A);
 public:
@@ -58,13 +58,13 @@ TEST(schemeRegistryTest) {
     CHECK(reg.IsFileSystemRegistered(file));
     CHECK(!reg.IsFileSystemRegistered(bla));
     
-    Ptr<TestFS_A> fsa = reg.CreateFileSystem(http);
+    Ptr<TestFS_A> fsa = reg.CreateFileSystem(http).unsafeCast<TestFS_A>();
     CHECK(fsa);
     CHECK(fsa->GetType() == 0);
-    Ptr<TestFS_B> fsb = reg.CreateFileSystem(ftp);
+    Ptr<TestFS_B> fsb = reg.CreateFileSystem(ftp).unsafeCast<TestFS_B>();
     CHECK(fsb);
     CHECK(fsb->GetType() == 1);
-    Ptr<TestFS_C> fsc = reg.CreateFileSystem(file);
+    Ptr<TestFS_C> fsc = reg.CreateFileSystem(file).unsafeCast<TestFS_C>();
     CHECK(fsc);
     CHECK(fsc->GetType() == 2);
 

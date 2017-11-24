@@ -3,15 +3,29 @@
 //------------------------------------------------------------------------------
 #include "Pre.h"
 #include "IO.h"
-#include "IO/Core/assignRegistry.h"
-#include "IO/Core/ioPointers.h"
+#include "IO/private/assignRegistry.h"
+#include "IO/private/ioPointers.h"
 #include "Core/Core.h"
+#include "IO/private/ioRouter.h"
+#include "IO/private/assignRegistry.h"
+#include "IO/private/schemeRegistry.h"
+#include "IO/private/loadQueue.h"
+#include "Core/RunLoop.h"
 
 namespace Oryol {
 
 using namespace _priv;
 
-IO::_state* IO::state = nullptr;
+namespace {
+    struct _state {
+        _priv::assignRegistry assignReg;
+        _priv::schemeRegistry schemeReg;
+        _priv::ioRouter router;
+        RunLoop::Id runLoopId = RunLoop::InvalidId;
+        class loadQueue loadQueue;
+    };
+    _state* state = nullptr;
+}
 
 //------------------------------------------------------------------------------
 void
@@ -91,7 +105,7 @@ IO::ResolveAssigns(const String& str) {
 
 //------------------------------------------------------------------------------
 void
-IO::RegisterFileSystem(const StringAtom& scheme, std::function<Ptr<FileSystem>()> fsCreator) {
+IO::RegisterFileSystem(const StringAtom& scheme, std::function<Ptr<FileSystemBase>()> fsCreator) {
     o_assert_dbg(IsValid());
 
     bool newFileSystem = !state->schemeReg.IsFileSystemRegistered(scheme);
